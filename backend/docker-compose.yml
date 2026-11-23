@@ -1,0 +1,46 @@
+# docker-compose.yml
+#
+# Purpose: Orchestrates local PostgreSQL 16 and Redis 7 containers for Platform Core development and manual verification.
+#
+# Context: Mounts docker/postgres-init to auto-provision metrix_owner and metrix_app (NOBYPASSRLS) roles before first schema push.
+#
+# Implementation Specs: Docker Compose services for postgres:16-alpine (port 5432) and redis:7-alpine (port 6379) with named volumes and healthchecks.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: metrix-platform-core-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_root_pwd
+      POSTGRES_DB: metrix_platform_core
+    ports:
+      - "5432:5432"
+    volumes:
+      - metrix_core_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d metrix_platform_core"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: metrix-platform-core-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - metrix_core_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  metrix_core_pgdata:
+  metrix_core_redis:

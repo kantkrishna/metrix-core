@@ -1,0 +1,43 @@
+# .github/workflows/ci-platform-core.yml
+#
+# Purpose: Automates security auditing, TypeScript compilation, OpenAPI contract validation, and PostgreSQL integration testing in CI.
+#
+# Context: Blocks pull requests if vulnerabilities, schema/contract drift, or RLS isolation regressions are introduced.
+#
+# Implementation Specs: GitHub Actions workflow on ubuntu-latest with Node.js 20 running npm audit, typecheck, openapi:validate, test:unit, and test:integration.
+
+name: Platform Core CI — Contract, Unit & PostgreSQL FORCE RLS Verification
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Security audit (zero vulnerabilities gate)
+        run: npm audit --audit-level=moderate
+
+      - name: TypeScript strict typecheck
+        run: npm run typecheck
+
+      - name: OpenAPI 3.1 & 30-Enum Drizzle Parity Gate
+        run: npm run openapi:validate
+
+      - name: Unit & Contract Test Suites
+        run: npm run test:unit
+
+      - name: PostgreSQL 16 Testcontainers Schema, Seed & FORCE RLS Isolation Suite
+        run: npm run test:integration

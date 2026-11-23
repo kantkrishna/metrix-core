@@ -1,0 +1,51 @@
+# metrix-core-backend/.gitignore
+#
+# Purpose: Excludes dependencies, TypeScript build outputs, local secrets, coverage reports,
+# and editor artifacts from version control.
+#
+# Context: Protects sensitive local credentials (.env) and keeps the metrix-core-backend
+# repository clean and reproducible.
+#
+# Implementation Specs: Covers Node.js, NestJS, TypeScript, Vitest, Docker, and VS Code artifacts.
+
+# Dependencies & Build Outputs
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local Environment & Secrets (Keep .env.example committed)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Test & Coverage Artifacts
+coverage/
+.vitest/
+
+# Logs & OS / Editor Files
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Nestjs specific
+/dist
+/node_modules
+/build
+/tmp
+
+# temp directory
+.temp
+.tmp

@@ -1,0 +1,1744 @@
+# openapi/openapi-platform-core-v1.yaml
+#
+# Purpose: Defines the complete machine-readable OpenAPI 3.1.0 REST contract for all Platform Core journeys and the App Shell module manifest.
+#
+# Context: Authoritative API contract aligning delegated OIDC auth, X-Tenant-Id/X-Organization-Id RLS headers, RBAC scopes, Decimal.js amounts, and RFC 9457 errors.
+#
+# Implementation Specs: OpenAPI 3.1.0 (JSON Schema 2020-12) covering 64 paths, 75 unique operationIds (incl. GET /me/modules), and 30 PostgreSQL-aligned enums.
+
+openapi: 3.1.0
+info:
+  title: Advantax Tax METRix — Platform Core Service API
+  version: 1.1.0
+  summary: Multi-tenant SaaS ERP administration, App Shell module manifest, RBAC, subscriptions, entitlements, audit orchestration & notifications.
+  description: |
+    Authoritative OpenAPI 3.1.0 contract for the **Advantax Tax METRix Platform Core Service** (64 paths, 75 operations, 30 PostgreSQL-aligned enums).
+    Includes `GET /api/v1/core/me/modules` for dynamic App Shell module switching and route rendering.
+    Enforces delegated OIDC authentication, database-level PostgreSQL FORCE RLS via `X-Tenant-Id` / `X-Organization-Id`,
+    exact Decimal.js `NUMERIC(14,2)` amounts, and RFC 9457 `application/problem+json` errors.
+  contact:
+    name: Advantax Tax METRix Platform Architecture Team
+    email: architecture@advantax-metrix.io
+  license:
+    name: Proprietary — Advantax Tax METRix
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+  - url: https://api.metrix-erp.cloud/api/v1/core
+    description: Production API Gateway (v1)
+  - url: https://staging-api.metrix-erp.cloud/api/v1/core
+    description: Staging Environment (v1)
+  - url: http://localhost:4001/api/v1/core
+    description: Local NestJS Development Server (v1)
+security:
+  - oidcBearer: []
+tags:
+  - name: App Shell & Health
+    description: Persisted navigation/theme preferences, dynamic App Shell module manifest (GET /me/modules), global search & DB health probes.
+  - name: J1 · Auth & Dashboard
+    description: Delegated OIDC sign-in discovery, token callback, workspace switcher, logout, and KPI dashboard.
+  - name: J2 · Tenants & Organizations
+    description: Multi-archetype tenant onboarding (SMB, Enterprise, CA Firm) and hierarchical organization trees.
+  - name: J3 · Users & Invitations
+    description: User directory, seat-quota preflight guard, OIDC activation invitations, and session revocation.
+  - name: J4 · Roles & RBAC
+    description: Four-service permission catalog, system default roles, custom role CRUD, and cloning.
+  - name: J5 · Organization Memberships
+    description: Scoped per-organization role assignments enforcing CA Firm multi-client isolation and effective access inspection.
+  - name: J6 · Subscriptions & Entitlements
+    description: Commercial plans, active tenant subscription summary, and per-organization module entitlement toggles.
+  - name: J7 · Subscription Changes
+    description: Decimal.js proration previews, downgrade hard/soft blocker evaluation, and typed confirmation execution.
+  - name: J8 · Platform Configuration
+    description: Optimistically versioned policies (OIDC/SSO, quotas, retention), service registry, API keys, and webhooks.
+  - name: J9 · Centralized Audit Logs
+    description: Immutable cross-service audit search, OpenTelemetry trace correlation, JSON diff inspection, and exports.
+  - name: J10 · Notifications
+    description: Channel providers, event routing matrix, BullMQ delivery retry logs, personal preferences, and inbox.
+
+paths:
+  /health/db:
+    get:
+      tags: [App Shell & Health]
+      operationId: checkDatabaseHealth
+      summary: Verify PostgreSQL connectivity, NOBYPASSRLS runtime role & FORCE RLS count
+      security: []
+      x-required-permission: public
+      x-rls-scope: NONE
+      responses:
+        "200":
+          description: Database connectivity and RLS posture status.
+          content: { application/json: { schema: { $ref: "#/components/schemas/DatabaseHealthResponse" } } }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /health/services:
+    get:
+      tags: [App Shell & Health]
+      operationId: getServicesHealth
+      summary: List live operational health for all registered METRix microservices
+      x-required-permission: authenticated
+      x-rls-scope: GLOBAL_CATALOG
+      responses:
+        "200":
+          description: Registered microservice health summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operationalCount, totalCount, services]
+                properties:
+                  operationalCount: { type: integer }
+                  totalCount: { type: integer }
+                  services: { type: array, items: { $ref: "#/components/schemas/SaasModuleSummary" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/preferences:
+    get:
+      tags: [App Shell & Health]
+      operationId: getMyUiPreferences
+      summary: Get persisted left navigation pin state, theme mode & unread bell count
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      responses:
+        "200":
+          description: Current user shell preferences.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserUiPreferences" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [App Shell & Health]
+      operationId: updateMyUiPreferences
+      summary: Persist floating/pinned left navigation preference, theme mode, or last workspace
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateUserUiPreferencesRequest" } } }
+      responses:
+        "200":
+          description: Updated user shell preferences.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserUiPreferences" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/modules:
+    get:
+      tags: [App Shell & Health]
+      operationId: getMyAccessibleModules
+      summary: Resolve accessible METRix modules, permitted routes & persisted shell UI preferences for the active organization
+      description: |
+        Single authoritative App Shell manifest endpoint evaluated against `core.v_effective_user_org_permissions`,
+        `core.tenant_module_subscriptions`, `core.organization_module_entitlements`, and `core.users` UI preferences.
+        Unauthorized or unsubscribed modules are omitted for standard users; `lockedAddOns` is populated only when the
+        caller holds `subscriptions:view` or `subscriptions:manage` and requests `includeLockedAddOns=true`.
+        Backed by Redis caching keyed by `userId:tenantId:organizationId` with `Cache-Control: private, max-age=60` and `ETag`.
+      x-required-permission: authenticated
+      x-rls-scope: TENANT_AND_ORG
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/OrgIdHeader"
+        - { name: organizationId, in: query, required: false, description: "Target organization UUID (takes precedence over X-Organization-Id; defaults to the user's primary or last active entitled organization).", schema: { type: string, format: uuid } }
+        - { name: includeLockedAddOns, in: query, required: false, description: "Honored only for Tenant Owners and Platform Super Admins holding subscriptions:view or subscriptions:manage; ignored for standard staff.", schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Permission-filtered App Shell module manifest, resolved organization context, and persisted UI preferences.
+          headers:
+            Cache-Control:
+              description: Private short-lived cache directive backed by Redis invalidation on role/membership/entitlement changes.
+              schema: { type: string, example: "private, max-age=60" }
+            ETag:
+              description: Entity tag derived from user roles, memberships, and active entitlement state.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccessibleModulesManifestResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /search:
+    get:
+      tags: [App Shell & Health]
+      operationId: globalCommandSearch
+      summary: Global command palette search (Cmd+K) scoped by caller RLS
+      x-required-permission: authenticated
+      x-rls-scope: TENANT_AND_ORG
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 100 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 25, default: 10 } }
+      responses:
+        "200":
+          description: Search results.
+          content: { application/json: { schema: { $ref: "#/components/schemas/GlobalSearchResponse" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/oidc/discover:
+    post:
+      tags: [J1 · Auth & Dashboard]
+      operationId: discoverOidcProvider
+      summary: Resolve tenant workspace slug or work email to delegated OIDC authorization URL
+      security: []
+      x-required-permission: public
+      x-rls-scope: NONE
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OidcDiscoverRequest" } } }
+      responses:
+        "200":
+          description: OIDC redirect parameters.
+          content: { application/json: { schema: { $ref: "#/components/schemas/OidcDiscoverResponse" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /auth/oidc/callback:
+    post:
+      tags: [J1 · Auth & Dashboard]
+      operationId: completeOidcCallback
+      summary: Exchange OIDC authorization code, sync user_oidc_identities & open tracked session
+      security: []
+      x-required-permission: public
+      x-rls-scope: NONE
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OidcCallbackRequest" } } }
+      responses:
+        "200":
+          description: Authenticated session payload.
+          content: { application/json: { schema: { $ref: "#/components/schemas/OidcCallbackResponse" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/workspaces:
+    get:
+      tags: [J1 · Auth & Dashboard]
+      operationId: listAccessibleWorkspaces
+      summary: List tenants and roles available to the authenticated user for the Workspace Picker
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      responses:
+        "200":
+          description: Accessible workspaces.
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WorkspaceSummary" } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/logout:
+    post:
+      tags: [J1 · Auth & Dashboard]
+      operationId: logoutSession
+      summary: Revoke current user_sessions record and return OIDC end-session redirect URL
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      responses:
+        "200":
+          description: Session revoked.
+          content: { application/json: { schema: { type: object, required: [revoked, oidcEndSessionUrl], properties: { revoked: { type: boolean }, oidcEndSessionUrl: { type: ["string", "null"], format: uri } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /dashboard/summary:
+    get:
+      tags: [J1 · Auth & Dashboard]
+      operationId: getDashboardSummary
+      summary: Fetch KPI summary cards, recent tenant usage, governance alerts & high-risk audit strip
+      x-required-permission: dashboard:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - { name: windowDays, in: query, schema: { type: integer, enum: [7, 30, 90], default: 30 } }
+      responses:
+        "200":
+          description: Dashboard summary payload.
+          content: { application/json: { schema: { $ref: "#/components/schemas/DashboardSummaryResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /tenants:
+    get:
+      tags: [J2 · Tenants & Organizations]
+      operationId: listTenants
+      summary: Search, filter, and paginate provisioned tenants with live seat/org utilization
+      x-required-permission: tenants:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/SearchParam"
+        - { name: customerType, in: query, schema: { $ref: "#/components/schemas/CustomerType" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/TenantStatus" } }
+        - { name: moduleCode, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Paginated tenant directory.
+          content: { application/json: { schema: { $ref: "#/components/schemas/TenantPageResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /tenants/slug-availability:
+    get:
+      tags: [J2 · Tenants & Organizations]
+      operationId: checkTenantSlugAvailability
+      summary: Check real-time availability of a workspace subdomain slug before onboarding
+      x-required-permission: tenants:create
+      x-rls-scope: SUPER_ADMIN
+      parameters:
+        - { name: slug, in: query, required: true, schema: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", minLength: 3, maxLength: 100 } }
+      responses:
+        "200":
+          description: Slug availability evaluation.
+          content: { application/json: { schema: { type: object, required: [slug, available], properties: { slug: { type: string }, available: { type: boolean }, suggestedAlternative: { type: ["string", "null"] } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /tenants/onboard:
+    post:
+      tags: [J2 · Tenants & Organizations]
+      operationId: onboardTenant
+      summary: Atomically execute 4-step Tenant Onboarding Wizard
+      x-required-permission: tenants:create
+      x-rls-scope: SUPER_ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OnboardTenantRequest" } } }
+      responses:
+        "201":
+          description: Provisioned tenant bundle.
+          content: { application/json: { schema: { $ref: "#/components/schemas/OnboardTenantResponse" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /tenants/{tenantId}:
+    get:
+      tags: [J2 · Tenants & Organizations]
+      operationId: getTenantById
+      summary: Get detailed tenant profile, quota utilization, and module summary
+      x-required-permission: tenants:view
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdPath" }]
+      responses:
+        "200": { description: Tenant details., content: { application/json: { schema: { $ref: "#/components/schemas/TenantDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [J2 · Tenants & Organizations]
+      operationId: updateTenant
+      summary: Update tenant legal entity metadata, region, currency, or FY cycle
+      x-required-permission: tenants:edit
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateTenantRequest" } } }
+      responses:
+        "200": { description: Updated tenant., content: { application/json: { schema: { $ref: "#/components/schemas/TenantDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /tenants/{tenantId}/suspend:
+    post:
+      tags: [J2 · Tenants & Organizations]
+      operationId: suspendTenant
+      summary: Suspend tenant with typed confirmation token & revoke active sessions
+      x-required-permission: tenants:manage
+      x-rls-scope: SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SuspendTenantRequest" } } }
+      responses:
+        "200": { description: Tenant suspended., content: { application/json: { schema: { $ref: "#/components/schemas/TenantDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /tenants/{tenantId}/reactivate:
+    post:
+      tags: [J2 · Tenants & Organizations]
+      operationId: reactivateTenant
+      summary: Restore a suspended tenant to ACTIVE status
+      x-required-permission: tenants:manage
+      x-rls-scope: SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdPath" }]
+      responses:
+        "200": { description: Tenant reactivated., content: { application/json: { schema: { $ref: "#/components/schemas/TenantDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /organizations/tree:
+    get:
+      tags: [J2 · Tenants & Organizations]
+      operationId: getOrganizationTree
+      summary: Retrieve RLS-isolated parent-subsidiary or CA Practice HQ-to-client organization hierarchy
+      x-required-permission: organizations:view
+      x-rls-scope: ORG_ISOLATED
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/SearchParam"
+      responses:
+        "200":
+          description: Organization tree.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tenantId, totalVisibleOrgs, roots]
+                properties:
+                  tenantId: { type: string, format: uuid }
+                  totalVisibleOrgs: { type: integer }
+                  roots: { type: array, items: { $ref: "#/components/schemas/OrganizationTreeNode" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /organizations:
+    post:
+      tags: [J2 · Tenants & Organizations]
+      operationId: createOrganization
+      summary: Provision a new subsidiary or CA client organization (enforces org_limit quota guard)
+      x-required-permission: organizations:create
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateOrganizationRequest" } } }
+      responses:
+        "201": { description: Organization created., content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /organizations/bulk-import:
+    post:
+      tags: [J2 · Tenants & Organizations]
+      operationId: bulkImportOrganizations
+      summary: Bulk-import CA Firm client organizations within remaining org_limit quota
+      x-required-permission: organizations:create
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BulkImportOrganizationsRequest" } } }
+      responses:
+        "201": { description: Bulk import completed., content: { application/json: { schema: { type: object, required: [createdCount, items], properties: { createdCount: { type: integer }, items: { type: array, items: { $ref: "#/components/schemas/OrganizationDetail" } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /organizations/{orgId}:
+    get:
+      tags: [J2 · Tenants & Organizations]
+      operationId: getOrganizationById
+      summary: Get RLS-protected organization details, member count & enabled module badges
+      x-required-permission: organizations:view
+      x-rls-scope: ORG_ISOLATED
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/OrgIdPath" }]
+      responses:
+        "200": { description: Organization details., content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [J2 · Tenants & Organizations]
+      operationId: updateOrganization
+      summary: Update organization legal name, GSTIN/CIN tax identifiers, or status
+      x-required-permission: organizations:edit
+      x-rls-scope: ORG_ISOLATED
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/OrgIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateOrganizationRequest" } } }
+      responses:
+        "200": { description: Organization updated., content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users:
+    get:
+      tags: [J3 · Users & Invitations]
+      operationId: listUsers
+      summary: List tenant-scoped platform users with OIDC IdP, org counts, roles & status filters
+      x-required-permission: users:view
+      x-rls-scope: TENANT
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/SearchParam"
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/UserStatus" } }
+      responses:
+        "200": { description: Users directory., content: { application/json: { schema: { $ref: "#/components/schemas/UserPageResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /users/{userId}/suspend:
+    post:
+      tags: [J3 · Users & Invitations]
+      operationId: suspendUser
+      summary: Suspend user account and revoke all active OIDC sessions immediately
+      x-required-permission: users:edit
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/UserIdPath" }]
+      responses:
+        "200": { description: User suspended., content: { application/json: { schema: { $ref: "#/components/schemas/UserSummary" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /users/{userId}/sessions/revoke:
+    post:
+      tags: [J3 · Users & Invitations]
+      operationId: revokeUserSessions
+      summary: Force logout across all active sessions for the specified user
+      x-required-permission: users:edit
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/UserIdPath" }]
+      responses:
+        "200": { description: Sessions revoked., content: { application/json: { schema: { type: object, required: [userId, revokedSessionCount], properties: { userId: { type: string, format: uuid }, revokedSessionCount: { type: integer } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /invitations:
+    get:
+      tags: [J3 · Users & Invitations]
+      operationId: listInvitations
+      summary: List pending and historical user invitations
+      x-required-permission: users:view
+      x-rls-scope: TENANT
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/InvitationStatus" } }
+      responses:
+        "200": { description: Invitations list., content: { application/json: { schema: { $ref: "#/components/schemas/InvitationPageResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [J3 · Users & Invitations]
+      operationId: createInvitations
+      summary: Dispatch multi-email OIDC invitations with org-role mappings (enforces seat quota cap)
+      x-required-permission: users:create
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateInvitationsRequest" } } }
+      responses:
+        "201": { description: Invitations dispatched., content: { application/json: { schema: { type: object, required: [dispatchedCount, invitations], properties: { dispatchedCount: { type: integer }, invitations: { type: array, items: { $ref: "#/components/schemas/InvitationDetail" } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /invitations/quota-check:
+    post:
+      tags: [J3 · Users & Invitations]
+      operationId: checkInvitationSeatQuota
+      summary: Preflight seat quota evaluation for the Invite Users Drawer
+      x-required-permission: users:create
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [proposedInviteCount], properties: { proposedInviteCount: { type: integer, minimum: 1, maximum: 100 } } } } }
+      responses:
+        "200": { description: Quota evaluation., content: { application/json: { schema: { $ref: "#/components/schemas/SeatQuotaCheckResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /invitations/{invitationId}/resend:
+    post:
+      tags: [J3 · Users & Invitations]
+      operationId: resendInvitation
+      summary: Rotate invitation token, extend expiry timestamp & re-dispatch invite email
+      x-required-permission: users:create
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/InvitationIdPath" }]
+      responses:
+        "200": { description: Invitation re-sent., content: { application/json: { schema: { $ref: "#/components/schemas/InvitationDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /invitations/{invitationId}:
+    delete:
+      tags: [J3 · Users & Invitations]
+      operationId: revokeInvitation
+      summary: Revoke a pending invitation and release reserved seat quota
+      x-required-permission: users:edit
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/InvitationIdPath" }]
+      responses:
+        "204": { description: Invitation revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /invitations/verify:
+    get:
+      tags: [J3 · Users & Invitations]
+      operationId: verifyInvitationToken
+      summary: Validate activation token for branded /invite/accept screen
+      security: []
+      x-required-permission: public
+      x-rls-scope: NONE
+      parameters: [{ name: token, in: query, required: true, schema: { type: string, minLength: 16 } }]
+      responses:
+        "200": { description: Valid invitation preview., content: { application/json: { schema: { $ref: "#/components/schemas/InvitationVerifyResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+  /invitations/accept:
+    post:
+      tags: [J3 · Users & Invitations]
+      operationId: acceptInvitation
+      summary: Complete delegated OIDC activation and materialize scoped organization_memberships
+      security: []
+      x-required-permission: public
+      x-rls-scope: NONE
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AcceptInvitationRequest" } } }
+      responses:
+        "200": { description: Activated session., content: { application/json: { schema: { $ref: "#/components/schemas/OidcCallbackResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "410": { $ref: "#/components/responses/Gone" }
+  /permissions/catalog:
+    get:
+      tags: [J4 · Roles & RBAC]
+      operationId: getPermissionsCatalog
+      summary: Retrieve 4-microservice permission matrix with high-privilege flags & entitlement lock states
+      x-required-permission: roles:view
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/OrgIdHeader" }]
+      responses:
+        "200": { description: Permission catalog., content: { application/json: { schema: { type: object, required: [modules], properties: { modules: { type: array, items: { $ref: "#/components/schemas/ModulePermissionGroup" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /roles:
+    get:
+      tags: [J4 · Roles & RBAC]
+      operationId: listRoles
+      summary: List immutable System Default Roles and tenant Custom Roles
+      x-required-permission: roles:view
+      x-rls-scope: TENANT
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - { name: type, in: query, schema: { type: string, enum: [ALL, SYSTEM_DEFAULT, CUSTOM], default: ALL } }
+        - { name: scope, in: query, schema: { $ref: "#/components/schemas/RoleScope" } }
+      responses:
+        "200": { description: Roles list., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/RoleSummary" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [J4 · Roles & RBAC]
+      operationId: createRole
+      summary: Create a custom tenant/organization RBAC role with selected permission IDs
+      x-required-permission: roles:create
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpsertRoleRequest" } } }
+      responses:
+        "201": { description: Role created., content: { application/json: { schema: { $ref: "#/components/schemas/RoleDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /roles/{roleId}:
+    get:
+      tags: [J4 · Roles & RBAC]
+      operationId: getRoleById
+      summary: Retrieve role metadata and full granted permission list
+      x-required-permission: roles:view
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/RoleIdPath" }]
+      responses:
+        "200": { description: Role details., content: { application/json: { schema: { $ref: "#/components/schemas/RoleDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [J4 · Roles & RBAC]
+      operationId: updateRole
+      summary: Replace custom role metadata & permission matrix (rejects system defaults with 403)
+      x-required-permission: roles:edit
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/RoleIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpsertRoleRequest" } } }
+      responses:
+        "200": { description: Role updated., content: { application/json: { schema: { $ref: "#/components/schemas/RoleDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [J4 · Roles & RBAC]
+      operationId: deleteRole
+      summary: Delete an unused custom role (returns 409 if active memberships reference it)
+      x-required-permission: roles:delete
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/RoleIdPath" }]
+      responses:
+        "204": { description: Role deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /roles/{roleId}/clone:
+    post:
+      tags: [J4 · Roles & RBAC]
+      operationId: cloneRole
+      summary: Clone a System Default or custom role into an editable custom tenant role
+      x-required-permission: roles:create
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/RoleIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, minLength: 2, maxLength: 120 }, description: { type: ["string", "null"], maxLength: 500 } } } } }
+      responses:
+        "201": { description: Cloned role., content: { application/json: { schema: { $ref: "#/components/schemas/RoleDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /memberships:
+    get:
+      tags: [J5 · Organization Memberships]
+      operationId: listOrganizationMemberships
+      summary: Query multi-org access matrix pivoted by USER or ORGANIZATION
+      x-required-permission: memberships:view
+      x-rls-scope: ORG_ISOLATED
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - { name: viewBy, in: query, schema: { type: string, enum: [USER, ORGANIZATION], default: USER } }
+        - { name: userId, in: query, schema: { type: string, format: uuid } }
+        - { name: organizationId, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/MembershipStatus" } }
+      responses:
+        "200": { description: Memberships list., content: { application/json: { schema: { $ref: "#/components/schemas/MembershipPageResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /memberships/bulk-assign:
+    post:
+      tags: [J5 · Organization Memberships]
+      operationId: bulkAssignMemberships
+      summary: Assign a user to multiple organizations/clients with per-org roles & optional expiry DATE
+      x-required-permission: memberships:create
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BulkAssignMembershipsRequest" } } }
+      responses:
+        "201": { description: Memberships created., content: { application/json: { schema: { type: object, required: [assignedCount, items], properties: { assignedCount: { type: integer }, items: { type: array, items: { $ref: "#/components/schemas/OrganizationMembershipDetail" } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /memberships/{membershipId}:
+    patch:
+      tags: [J5 · Organization Memberships]
+      operationId: updateOrganizationMembership
+      summary: Update assigned role, status, or accessExpiresOn DATE for a single org membership
+      x-required-permission: memberships:edit
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/MembershipIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateMembershipRequest" } } }
+      responses:
+        "200": { description: Membership updated., content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationMembershipDetail" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [J5 · Organization Memberships]
+      operationId: revokeOrganizationMembership
+      summary: Revoke user access to an organization (enforces immediate RLS isolation)
+      x-required-permission: memberships:delete
+      x-rls-scope: TENANT_OWNER
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/MembershipIdPath" }]
+      responses:
+        "204": { description: Membership revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /memberships/effective-permissions:
+    get:
+      tags: [J5 · Organization Memberships]
+      operationId: getEffectiveOrgPermissions
+      summary: Inspect computed effective permissions (Role ∩ Active Org Entitlements) from DB view
+      x-required-permission: memberships:view
+      x-rls-scope: ORG_ISOLATED
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - { name: userId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: organizationId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Effective permissions., content: { application/json: { schema: { $ref: "#/components/schemas/EffectivePermissionsResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /plans:
+    get:
+      tags: [J6 · Subscriptions & Entitlements]
+      operationId: listSubscriptionPlans
+      summary: List active commercial subscription plans and available microservice modules
+      x-required-permission: subscriptions:view
+      x-rls-scope: GLOBAL_CATALOG
+      responses:
+        "200": { description: Plans & modules., content: { application/json: { schema: { type: object, required: [plans, modules], properties: { plans: { type: array, items: { $ref: "#/components/schemas/SubscriptionPlan" } }, modules: { type: array, items: { $ref: "#/components/schemas/SaasModuleSummary" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /subscriptions/current:
+    get:
+      tags: [J6 · Subscriptions & Entitlements]
+      operationId: getCurrentSubscription
+      summary: Retrieve active tenant plan banner, utilization metrics & module entitlement cards
+      x-required-permission: subscriptions:view
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: Current subscription., content: { application/json: { schema: { $ref: "#/components/schemas/CurrentSubscriptionResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /entitlements/matrix:
+    get:
+      tags: [J6 · Subscriptions & Entitlements]
+      operationId: getEntitlementsMatrix
+      summary: Retrieve Organizations × Subscribed Modules entitlement matrix with per-org seat caps
+      x-required-permission: entitlements:view
+      x-rls-scope: ORG_ISOLATED
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: Entitlement matrix., content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementMatrixResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /entitlements/organizations/{orgId}/modules/{moduleCode}:
+    patch:
+      tags: [J6 · Subscriptions & Entitlements]
+      operationId: updateOrganizationModuleEntitlement
+      summary: Toggle a subscribed module on/off or adjust allocatedSeatLimit for a specific organization
+      x-required-permission: entitlements:edit
+      x-rls-scope: TENANT_OWNER
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/OrgIdPath"
+        - { name: moduleCode, in: path, required: true, schema: { type: string, enum: [tax_financial, payroll_hrms, ca_practice] } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateOrgEntitlementRequest" } } }
+      responses:
+        "200": { description: Entitlement updated., content: { application/json: { schema: { $ref: "#/components/schemas/OrgModuleEntitlement" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /subscriptions/change/preview:
+    post:
+      tags: [J7 · Subscription Changes]
+      operationId: previewSubscriptionChange
+      summary: Compute exact Decimal.js proration, hard blockers & soft warnings for upgrade/downgrade
+      x-required-permission: subscriptions:manage
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SubscriptionChangePreviewRequest" } } }
+      responses:
+        "200": { description: Previewed change., content: { application/json: { schema: { $ref: "#/components/schemas/SubscriptionChangeLog" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /subscriptions/change/confirm:
+    post:
+      tags: [J7 · Subscription Changes]
+      operationId: confirmSubscriptionChange
+      summary: Confirm previewed upgrade/downgrade after verifying zero hard blockers & typed safeguard token
+      x-required-permission: subscriptions:manage
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ConfirmSubscriptionChangeRequest" } } }
+      responses:
+        "200": { description: Change confirmed., content: { application/json: { schema: { $ref: "#/components/schemas/SubscriptionChangeLog" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+  /subscriptions/changes:
+    get:
+      tags: [J7 · Subscription Changes]
+      operationId: listSubscriptionChanges
+      summary: List historical and scheduled subscription change transactions
+      x-required-permission: subscriptions:view
+      x-rls-scope: TENANT
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/PageParam" }, { $ref: "#/components/parameters/PageSizeParam" }]
+      responses:
+        "200": { description: Change logs., content: { application/json: { schema: { $ref: "#/components/schemas/SubscriptionChangePageResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /config:
+    get:
+      tags: [J8 · Platform Configuration]
+      operationId: getPlatformConfigurations
+      summary: Get global and tenant-overridden configuration entries grouped by tab (secrets masked)
+      x-required-permission: config:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - { name: category, in: query, schema: { $ref: "#/components/schemas/ConfigCategory" } }
+      responses:
+        "200": { description: Config items., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PlatformConfigItem" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /config/{category}:
+    put:
+      tags: [J8 · Platform Configuration]
+      operationId: updatePlatformConfigurationCategory
+      summary: Save dirty-form configuration changes with optimistic version check & impact confirmation
+      x-required-permission: config:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - { name: category, in: path, required: true, schema: { $ref: "#/components/schemas/ConfigCategory" } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdatePlatformConfigRequest" } } }
+      responses:
+        "200": { description: Saved config., content: { application/json: { schema: { $ref: "#/components/schemas/PlatformConfigItem" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /service-registry:
+    get:
+      tags: [J8 · Platform Configuration]
+      operationId: getServiceRegistry
+      summary: Retrieve read-only microservice registry, API versions & global feature flags
+      x-required-permission: config:view
+      x-rls-scope: GLOBAL_CATALOG
+      responses:
+        "200": { description: Services list., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/SaasModuleSummary" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api-keys:
+    get:
+      tags: [J8 · Platform Configuration]
+      operationId: listApiKeys
+      summary: List scoped M2M API keys with masked prefixes
+      x-required-permission: config:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: API keys., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ApiKeySummary" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [J8 · Platform Configuration]
+      operationId: createApiKey
+      summary: Create a scoped API key (returns plaintext secret once)
+      x-required-permission: config:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateApiKeyRequest" } } }
+      responses:
+        "201": { description: Key created., content: { application/json: { schema: { $ref: "#/components/schemas/ApiKeyCreatedResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api-keys/{keyId}/rotate:
+    post:
+      tags: [J8 · Platform Configuration]
+      operationId: rotateApiKey
+      summary: Rotate an API key secret and transition previous key to ROTATED
+      x-required-permission: config:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/KeyIdPath" }]
+      responses:
+        "200": { description: Rotated key., content: { application/json: { schema: { $ref: "#/components/schemas/ApiKeyCreatedResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api-keys/{keyId}:
+    delete:
+      tags: [J8 · Platform Configuration]
+      operationId: revokeApiKey
+      summary: Immediately revoke a scoped API key
+      x-required-permission: config:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/KeyIdPath" }]
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /webhooks:
+    get:
+      tags: [J8 · Platform Configuration]
+      operationId: listWebhooks
+      summary: List outbound HTTPS webhook endpoints and recent BullMQ delivery codes
+      x-required-permission: config:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: Webhooks list., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WebhookEndpointSummary" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [J8 · Platform Configuration]
+      operationId: createWebhook
+      summary: Register a new outbound HTTPS webhook endpoint
+      x-required-permission: config:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateWebhookRequest" } } }
+      responses:
+        "201": { description: Webhook registered., content: { application/json: { schema: { $ref: "#/components/schemas/WebhookEndpointSummary" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /webhooks/{webhookId}:
+    patch:
+      tags: [J8 · Platform Configuration]
+      operationId: updateWebhook
+      summary: Update subscribed event list or pause/resume an outbound webhook endpoint
+      x-required-permission: config:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/WebhookIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateWebhookRequest" } } }
+      responses:
+        "200": { description: Webhook updated., content: { application/json: { schema: { $ref: "#/components/schemas/WebhookEndpointSummary" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /audit-logs:
+    get:
+      tags: [J9 · Centralized Audit Logs]
+      operationId: searchAuditLogs
+      summary: Cursor-paginated immutable audit explorer with faceted filters
+      x-required-permission: audit.logs:view
+      x-rls-scope: ORG_ISOLATED
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/CursorParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/SearchParam"
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: serviceSource, in: query, schema: { type: string } }
+        - { name: actionCategory, in: query, schema: { $ref: "#/components/schemas/AuditCategory" } }
+        - { name: outcome, in: query, schema: { $ref: "#/components/schemas/AuditOutcome" } }
+        - { name: otelTraceId, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Audit logs page., content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogCursorResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /audit-logs/{auditId}:
+    get:
+      tags: [J9 · Centralized Audit Logs]
+      operationId: getAuditLogDetail
+      summary: Inspect single audit event metadata, OTel Trace ID & Before/After JSON diff payload
+      x-required-permission: audit.logs:view
+      x-rls-scope: ORG_ISOLATED
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/AuditIdPath" }]
+      responses:
+        "200": { description: Audit detail., content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /audit-logs/export:
+    post:
+      tags: [J9 · Centralized Audit Logs]
+      operationId: exportAuditLogs
+      summary: Queue or stream RLS-filtered CSV/JSON export of centralized audit logs
+      x-required-permission: audit.logs:export
+      x-rls-scope: ORG_ISOLATED
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogExportRequest" } } }
+      responses:
+        "202": { description: Export accepted., content: { application/json: { schema: { $ref: "#/components/schemas/AuditLogExportResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /notifications/channels:
+    get:
+      tags: [J10 · Notifications]
+      operationId: listNotificationChannels
+      summary: Get operational provider cards for In-App, Email (SES) & BullMQ Webhook channels
+      x-required-permission: notifications:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: Channels., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/NotificationChannelConfig" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /notifications/rules:
+    get:
+      tags: [J10 · Notifications]
+      operationId: listNotificationRoutingRules
+      summary: Retrieve Admin Event Routing Matrix with channel toggles & recipient role lists
+      x-required-permission: notifications:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: Routing rules., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/NotificationRoutingRule" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /notifications/rules/{ruleId}:
+    patch:
+      tags: [J10 · Notifications]
+      operationId: updateNotificationRoutingRule
+      summary: Update channel toggles, email urgency mode, templates, or recipient roles
+      x-required-permission: notifications:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/RuleIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateNotificationRuleRequest" } } }
+      responses:
+        "200": { description: Updated rule., content: { application/json: { schema: { $ref: "#/components/schemas/NotificationRoutingRule" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /notifications/rules/{ruleId}/test-dispatch:
+    post:
+      tags: [J10 · Notifications]
+      operationId: testDispatchNotificationRule
+      summary: Enqueue a synthetic BullMQ test notification and return bullmqJobId
+      x-required-permission: notifications:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/RuleIdPath" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [channel], properties: { channel: { $ref: "#/components/schemas/NotificationChannel" } } } } }
+      responses:
+        "202": { description: Queued., content: { application/json: { schema: { type: object, required: [deliveryId, bullmqJobId, status], properties: { deliveryId: { type: string, format: uuid }, bullmqJobId: { type: string }, status: { $ref: "#/components/schemas/DeliveryStatus" } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /notifications/deliveries:
+    get:
+      tags: [J10 · Notifications]
+      operationId: listNotificationDeliveries
+      summary: Inspect BullMQ notification dispatch logs
+      x-required-permission: notifications:view
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - { name: deliveryStatus, in: query, schema: { $ref: "#/components/schemas/DeliveryStatus" } }
+      responses:
+        "200": { description: Deliveries., content: { application/json: { schema: { $ref: "#/components/schemas/NotificationDeliveryPageResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /notifications/deliveries/{deliveryId}/retry:
+    post:
+      tags: [J10 · Notifications]
+      operationId: retryNotificationDelivery
+      summary: Trigger 1-click BullMQ retry for a failed or bounced notification delivery
+      x-required-permission: notifications:manage
+      x-rls-scope: TENANT_OR_SUPER_ADMIN
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }, { $ref: "#/components/parameters/DeliveryIdPath" }]
+      responses:
+        "202": { description: Retry queued., content: { application/json: { schema: { $ref: "#/components/schemas/NotificationDelivery" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /me/notifications/preferences:
+    get:
+      tags: [J10 · Notifications]
+      operationId: getMyNotificationPreferences
+      summary: Load personal administrator category toggles, daily digest schedule & quiet hours
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      responses:
+        "200": { description: Preferences., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserNotificationPreference" } } } } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      tags: [J10 · Notifications]
+      operationId: saveMyNotificationPreferences
+      summary: Save personal administrator category toggles, digest time & mute schedule
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      parameters: [{ $ref: "#/components/parameters/TenantIdHeader" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, minItems: 1, items: { $ref: "#/components/schemas/UpsertUserNotificationPreference" } } } } } }
+      responses:
+        "200": { description: Saved., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserNotificationPreference" } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/notifications/inbox:
+    get:
+      tags: [J10 · Notifications]
+      operationId: getMyNotificationInbox
+      summary: Fetch personal In-App notifications and unread count for Top Bar Bell popover
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200": { description: Inbox., content: { application/json: { schema: { $ref: "#/components/schemas/NotificationInboxResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/notifications/inbox/{deliveryId}/read:
+    patch:
+      tags: [J10 · Notifications]
+      operationId: markNotificationRead
+      summary: Mark a personal In-App notification as read
+      x-required-permission: authenticated
+      x-rls-scope: USER_SELF
+      parameters: [{ $ref: "#/components/parameters/DeliveryIdPath" }]
+      responses:
+        "200": { description: Marked read., content: { application/json: { schema: { $ref: "#/components/schemas/NotificationDelivery" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    oidcBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Managed OIDC / OAuth 2.0 JWT Access Token validated via OIDC_JWKS_URI.
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Scoped M2M API key verified against core.api_keys.key_hash.
+
+  parameters:
+    TenantIdHeader: { name: X-Tenant-Id, in: header, required: false, schema: { type: string, format: uuid } }
+    OrgIdHeader: { name: X-Organization-Id, in: header, required: false, schema: { type: string, format: uuid } }
+    TenantIdPath: { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+    OrgIdPath: { name: orgId, in: path, required: true, schema: { type: string, format: uuid } }
+    UserIdPath: { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    InvitationIdPath: { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+    RoleIdPath: { name: roleId, in: path, required: true, schema: { type: string, format: uuid } }
+    MembershipIdPath: { name: membershipId, in: path, required: true, schema: { type: string, format: uuid } }
+    KeyIdPath: { name: keyId, in: path, required: true, schema: { type: string, format: uuid } }
+    WebhookIdPath: { name: webhookId, in: path, required: true, schema: { type: string, format: uuid } }
+    AuditIdPath: { name: auditId, in: path, required: true, schema: { type: string, format: uuid } }
+    RuleIdPath: { name: ruleId, in: path, required: true, schema: { type: string, format: uuid } }
+    DeliveryIdPath: { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+    PageParam: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSizeParam: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    CursorParam: { name: cursor, in: query, schema: { type: string } }
+    LimitParam: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+    SearchParam: { name: search, in: query, schema: { type: string, maxLength: 120 } }
+
+  responses:
+    BadRequest: { description: Validation error (RFC 9457)., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    Unauthorized: { description: Missing or invalid OIDC JWT / API Key., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    Forbidden: { description: Insufficient RBAC permission or RLS block., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    NotFound: { description: Resource not found or invisible under caller RLS., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    Conflict: { description: Unique constraint or optimistic version conflict., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    Gone: { description: Expired invitation token., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    UnprocessableEntity: { description: Quota guardrail or downgrade hard blocker., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+    ServiceUnavailable: { description: Database or Redis unavailable., content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetails" } } } }
+
+  schemas:
+    DecimalAmount:
+      type: string
+      pattern: "^-?\d{1,12}\.\d{2}$"
+    LocalWallTime:
+      type: string
+      pattern: "^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$"
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        traceId: { type: ["string", "null"] }
+        missingPermission: { type: ["string", "null"] }
+        conflictField: { type: ["string", "null"] }
+        hardBlockers: { type: array, items: { type: string } }
+        fieldErrors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+    OffsetPaginationMeta:
+      type: object
+      required: [page, pageSize, totalItems, totalPages]
+      properties: { page: { type: integer }, pageSize: { type: integer }, totalItems: { type: integer }, totalPages: { type: integer } }
+    CursorPaginationMeta:
+      type: object
+      required: [limit, hasMore, nextCursor]
+      properties: { limit: { type: integer }, hasMore: { type: boolean }, nextCursor: { type: ["string", "null"] } }
+    AuditFields:
+      type: object
+      required: [createdBy, createdAt, updatedBy, updatedAt]
+      properties:
+        createdBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedBy: { type: string, format: uuid }
+        updatedAt: { type: string, format: date-time }
+    CustomerType:
+      type: string
+      enum: [INDIVIDUAL_SMB, ENTERPRISE, CA_FIRM]
+    TenantStatus:
+      type: string
+      enum: [TRIAL, ACTIVE, SUSPENDED, ARCHIVED]
+    OrgType:
+      type: string
+      enum: [PRIMARY_BUSINESS, CORPORATE_HQ, SUBSIDIARY, BRANCH, CA_PRACTICE_HQ, CA_CLIENT_ORG]
+    OrgStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE, SUSPENDED, ARCHIVED]
+    UserStatus:
+      type: string
+      enum: [ACTIVE, INVITED, SUSPENDED, DEACTIVATED]
+    UiThemeMode:
+      type: string
+      enum: [LIGHT, DARK, SYSTEM]
+    OidcProviderType:
+      type: string
+      enum: [MANAGED_OIDC, ENTRA_ID_SSO, GOOGLE_WORKSPACE_SSO, CUSTOM_OIDC]
+    OidcSyncStatus:
+      type: string
+      enum: [VERIFIED, PENDING_LINK, SYNC_ERROR]
+    InvitationStatus:
+      type: string
+      enum: [SENT, ACCEPTED, EXPIRED, REVOKED]
+    RoleScope:
+      type: string
+      enum: [PLATFORM, TENANT, ORGANIZATION]
+    PermissionAction:
+      type: string
+      enum: [VIEW, CREATE, EDIT, DELETE, APPROVE, EXPORT, MANAGE]
+    MembershipType:
+      type: string
+      enum: [INTERNAL_STAFF, TENANT_ADMIN, CA_PRACTICE_STAFF, EXTERNAL_CLIENT_USER]
+    MembershipStatus:
+      type: string
+      enum: [ACTIVE, INVITED, SUSPENDED, EXPIRED, REVOKED]
+    ServiceHealth:
+      type: string
+      enum: [OPERATIONAL, DEGRADED, OUTAGE]
+    BillingCycle:
+      type: string
+      enum: [MONTHLY, ANNUAL]
+    SubscriptionStatus:
+      type: string
+      enum: [TRIAL, ACTIVE, PAST_DUE, CANCELLED, SUSPENDED]
+    ModuleSubscriptionStatus:
+      type: string
+      enum: [ACTIVE, TRIAL, NOT_SUBSCRIBED, UPGRADE_PENDING, SUSPENDED]
+    SubscriptionChangeType:
+      type: string
+      enum: [UPGRADE, DOWNGRADE, MODULE_ADDED, MODULE_REMOVED, QUOTA_ADJUSTED]
+    ChangeEffectiveTiming:
+      type: string
+      enum: [IMMEDIATE, END_OF_BILLING_CYCLE]
+    SubscriptionChangeStatus:
+      type: string
+      enum: [PREVIEWED, SCHEDULED, APPLIED, CANCELLED]
+    ConfigCategory:
+      type: string
+      enum: [GENERAL_LOCALIZATION, AUTH_OIDC_SSO, ISOLATION_QUOTAS, FEATURE_FLAGS]
+    ApiKeyStatus:
+      type: string
+      enum: [ACTIVE, ROTATED, REVOKED]
+    WebhookStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, FAILING]
+    AuditCategory:
+      type: string
+      enum: [AUTH, RBAC, SUBSCRIPTION, CONFIG, TENANCY, MODULE_DOMAIN]
+    AuditOutcome:
+      type: string
+      enum: [SUCCESS, DENIED, FAILED]
+    NotificationChannel:
+      type: string
+      enum: [IN_APP, EMAIL_SES, WEBHOOK]
+    NotificationCategory:
+      type: string
+      enum: [SECURITY_ACCESS, TENANCY_ONBOARDING, BILLING_QUOTAS, SYSTEM_ALERTS]
+    EmailRoutingMode:
+      type: string
+      enum: [OFF, ENABLED, IMMEDIATE]
+    DeliveryCadence:
+      type: string
+      enum: [REAL_TIME, DAILY_DIGEST]
+    DeliveryStatus:
+      type: string
+      enum: [QUEUED, DELIVERED, BOUNCED, RETRYING, FAILED]
+    DatabaseHealthResponse:
+      type: object
+      required: [service, status, database, timestamp]
+      properties:
+        service: { type: string }
+        status: { $ref: "#/components/schemas/ServiceHealth" }
+        database:
+          type: object
+          required: [ok, currentRole, bypassRls, isSuperuser, serverVersion, enforcedRlsTables]
+          properties: { ok: { type: boolean }, currentRole: { type: string }, bypassRls: { type: boolean }, isSuperuser: { type: boolean }, serverVersion: { type: string }, enforcedRlsTables: { type: integer } }
+        timestamp: { type: string, format: date-time }
+    SaasModuleSummary:
+      type: object
+      required: [code, displayName, description, apiVersion, healthStatus, includedFeatures, isCoreService, isActive]
+      properties: { code: { type: string }, displayName: { type: string }, description: { type: string }, apiVersion: { type: string }, healthStatus: { $ref: "#/components/schemas/ServiceHealth" }, includedFeatures: { type: array, items: { type: string } }, isCoreService: { type: boolean }, isActive: { type: boolean } }
+    UserUiPreferences:
+      type: object
+      required: [userId, uiNavPinned, uiThemeMode, unreadNotificationCount]
+      properties: { userId: { type: string, format: uuid }, uiNavPinned: { type: boolean }, uiThemeMode: { $ref: "#/components/schemas/UiThemeMode" }, lastWorkspaceTenantId: { type: ["string", "null"], format: uuid }, unreadNotificationCount: { type: integer } }
+    UpdateUserUiPreferencesRequest:
+      type: object
+      properties: { uiNavPinned: { type: boolean }, uiThemeMode: { $ref: "#/components/schemas/UiThemeMode" }, lastWorkspaceTenantId: { type: ["string", "null"], format: uuid } }
+    ModuleContextFallback:
+      type: object
+      required: [fallbackApplied]
+      properties:
+        fallbackApplied: { type: boolean }
+        requestedOrganizationId: { type: ["string", "null"], format: uuid }
+        reason: { type: ["string", "null"] }
+    AccessibleModuleItem:
+      type: object
+      required: [code, name, description, baseUrl, themeKey, apiVersion, status, healthStatus, isCoreService, permittedRoutes, effectivePermissions, featureFlags]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        baseUrl: { type: string }
+        themeKey: { type: string }
+        apiVersion: { type: string }
+        status: { $ref: "#/components/schemas/ModuleSubscriptionStatus" }
+        healthStatus: { $ref: "#/components/schemas/ServiceHealth" }
+        isCoreService: { type: boolean }
+        permittedRoutes: { type: array, items: { type: string } }
+        effectivePermissions: { type: array, items: { type: string } }
+        featureFlags: { type: object, additionalProperties: { type: boolean } }
+    LockedModuleAddOn:
+      type: object
+      required: [code, name, description, status, manageSubscriptionUrl, upgradeRequired]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [NOT_SUBSCRIBED, SUSPENDED] }
+        manageSubscriptionUrl: { type: string }
+        upgradeRequired: { type: boolean }
+    AccessibleModulesManifestResponse:
+      type: object
+      required: [tenantId, organizationId, organizationCode, organizationName, contextFallback, uiPreferences, modules, lockedAddOns, evaluatedAt]
+      properties:
+        tenantId: { type: ["string", "null"], format: uuid }
+        organizationId: { type: ["string", "null"], format: uuid }
+        organizationCode: { type: ["string", "null"] }
+        organizationName: { type: ["string", "null"] }
+        contextFallback: { oneOf: [{ $ref: "#/components/schemas/ModuleContextFallback" }, { type: "null" }] }
+        uiPreferences: { $ref: "#/components/schemas/UserUiPreferences" }
+        modules: { type: array, items: { $ref: "#/components/schemas/AccessibleModuleItem" } }
+        lockedAddOns: { type: array, items: { $ref: "#/components/schemas/LockedModuleAddOn" } }
+        evaluatedAt: { type: string, format: date-time }
+    GlobalSearchResponse:
+      type: object
+      required: [query, results]
+      properties: { query: { type: string }, results: { type: array, items: { type: object, required: [entityType, id, title, subtitle, href], properties: { entityType: { type: string, enum: [TENANT, ORGANIZATION, USER, ROLE, AUDIT_EVENT] }, id: { type: string }, title: { type: string }, subtitle: { type: string }, href: { type: string } } } } }
+    OidcDiscoverRequest:
+      type: object
+      properties: { workspaceSlug: { type: string }, email: { type: string, format: email } }
+    OidcDiscoverResponse:
+      type: object
+      required: [providerType, authorizationUrl, issuerUrl]
+      properties: { providerType: { $ref: "#/components/schemas/OidcProviderType" }, authorizationUrl: { type: string, format: uri }, issuerUrl: { type: string, format: uri } }
+    OidcCallbackRequest:
+      type: object
+      required: [code, state, codeVerifier]
+      properties: { code: { type: string }, state: { type: string }, codeVerifier: { type: string } }
+    WorkspaceSummary:
+      type: object
+      required: [tenantId, tenantCode, legalName, customerType, roleName, isTenantOwner]
+      properties: { tenantId: { type: string, format: uuid }, tenantCode: { type: string }, legalName: { type: string }, customerType: { $ref: "#/components/schemas/CustomerType" }, roleName: { type: string }, isTenantOwner: { type: boolean } }
+    OidcCallbackResponse:
+      type: object
+      required: [accessToken, expiresInSeconds, user, workspaces]
+      properties: { accessToken: { type: string }, expiresInSeconds: { type: integer }, user: { $ref: "#/components/schemas/UserUiPreferences" }, workspaces: { type: array, items: { $ref: "#/components/schemas/WorkspaceSummary" } } }
+    DashboardSummaryResponse:
+      type: object
+      required: [kpis, recentTenants, governanceAlerts, recentHighRiskAudits]
+      properties:
+        kpis: { type: object, required: [activeTenants, provisionedOrgs, activeUsers, mfaEnrolledPct, activeModuleEntitlements], properties: { activeTenants: { type: integer }, provisionedOrgs: { type: integer }, activeUsers: { type: integer }, mfaEnrolledPct: { type: number }, activeModuleEntitlements: { type: integer } } }
+        recentTenants: { type: array, items: { $ref: "#/components/schemas/TenantDetail" } }
+        governanceAlerts: { type: array, items: { type: object, required: [severity, title, detail], properties: { severity: { type: string, enum: [INFO, WARNING, CRITICAL] }, title: { type: string }, detail: { type: string } } } }
+        recentHighRiskAudits: { type: array, items: { $ref: "#/components/schemas/AuditLogSummary" } }
+    TenantQuotaUtilization:
+      type: object
+      required: [seatLimit, activeSeatsUsed, pendingInviteSeats, orgLimit, activeOrgsUsed, seatUtilizationPct, orgUtilizationPct, isSeatNearCap, isOrgNearCap]
+      properties: { seatLimit: { type: integer }, activeSeatsUsed: { type: integer }, pendingInviteSeats: { type: integer }, orgLimit: { type: integer }, activeOrgsUsed: { type: integer }, seatUtilizationPct: { type: number }, orgUtilizationPct: { type: number }, isSeatNearCap: { type: boolean }, isOrgNearCap: { type: boolean } }
+    TenantDetail:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, tenantCode, legalName, slug, customerType, status, primaryRegion, defaultCurrency, fyStartMonth, defaultTimezone]
+          properties: { id: { type: string, format: uuid }, tenantCode: { type: string }, legalName: { type: string }, slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }, customerType: { $ref: "#/components/schemas/CustomerType" }, status: { $ref: "#/components/schemas/TenantStatus" }, primaryRegion: { type: string }, defaultCurrency: { type: string, minLength: 3, maxLength: 3 }, fyStartMonth: { type: integer, minimum: 1, maximum: 12 }, defaultTimezone: { type: string }, trialEndsOn: { type: ["string", "null"], format: date }, suspendedAt: { type: ["string", "null"], format: date-time }, suspensionReason: { type: ["string", "null"] }, quota: { $ref: "#/components/schemas/TenantQuotaUtilization" } }
+    TenantPageResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/TenantDetail" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }
+    OnboardTenantRequest:
+      type: object
+      required: [customerType, legalName, slug, primaryAdmin, planCode, billingCycle, initialModules]
+      properties: { customerType: { $ref: "#/components/schemas/CustomerType" }, legalName: { type: string, minLength: 2, maxLength: 200 }, slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", minLength: 3, maxLength: 100 }, primaryRegion: { type: string, default: ap-south-1 }, defaultCurrency: { type: string, default: INR }, fyStartMonth: { type: integer, minimum: 1, maximum: 12, default: 4 }, defaultTimezone: { type: string, default: Asia/Kolkata }, initialOrganizations: { type: array, items: { $ref: "#/components/schemas/CreateOrganizationRequest" } }, primaryAdmin: { type: object, required: [fullName, email], properties: { fullName: { type: string }, email: { type: string, format: email }, phone: { type: ["string", "null"] } } }, planCode: { type: string }, billingCycle: { $ref: "#/components/schemas/BillingCycle" }, initialModules: { type: array, items: { type: string, enum: [tax_financial, payroll_hrms, ca_practice] } } }
+    OnboardTenantResponse:
+      type: object
+      required: [tenant, organizations, subscription, adminInvitation]
+      properties: { tenant: { $ref: "#/components/schemas/TenantDetail" }, organizations: { type: array, items: { $ref: "#/components/schemas/OrganizationDetail" } }, subscription: { $ref: "#/components/schemas/CurrentSubscriptionResponse" }, adminInvitation: { $ref: "#/components/schemas/InvitationDetail" } }
+    UpdateTenantRequest:
+      type: object
+      properties: { legalName: { type: string, minLength: 2, maxLength: 200 }, defaultCurrency: { type: string, minLength: 3, maxLength: 3 }, fyStartMonth: { type: integer, minimum: 1, maximum: 12 }, defaultTimezone: { type: string } }
+    SuspendTenantRequest:
+      type: object
+      required: [confirmationToken, reason]
+      properties: { confirmationToken: { type: string, minLength: 2 }, reason: { type: string, minLength: 5, maxLength: 500 } }
+    OrganizationDetail:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, tenantId, orgCode, legalName, orgType, taxIdentifiers, status]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: string, format: uuid }, parentOrgId: { type: ["string", "null"], format: uuid }, orgCode: { type: string }, legalName: { type: string }, orgType: { $ref: "#/components/schemas/OrgType" }, taxIdentifiers: { type: object, additionalProperties: { type: string } }, status: { $ref: "#/components/schemas/OrgStatus" }, memberCount: { type: integer }, enabledModules: { type: array, items: { type: string } } }
+    OrganizationTreeNode:
+      type: object
+      required: [organization, children]
+      properties: { organization: { $ref: "#/components/schemas/OrganizationDetail" }, children: { type: array, items: { $ref: "#/components/schemas/OrganizationTreeNode" } } }
+    CreateOrganizationRequest:
+      type: object
+      required: [legalName, orgType]
+      properties: { parentOrgId: { type: ["string", "null"], format: uuid }, orgCode: { type: string, maxLength: 24 }, legalName: { type: string, minLength: 2, maxLength: 200 }, orgType: { $ref: "#/components/schemas/OrgType" }, taxIdentifiers: { type: object, additionalProperties: { type: string } } }
+    BulkImportOrganizationsRequest:
+      type: object
+      required: [items]
+      properties: { items: { type: array, minItems: 1, maxItems: 200, items: { $ref: "#/components/schemas/CreateOrganizationRequest" } } }
+    UpdateOrganizationRequest:
+      type: object
+      properties: { legalName: { type: string, minLength: 2, maxLength: 200 }, taxIdentifiers: { type: object, additionalProperties: { type: string } }, status: { $ref: "#/components/schemas/OrgStatus" } }
+    UserSummary:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, email, fullName, isPlatformSuperAdmin, mfaEnrolled, status, uiNavPinned, uiThemeMode]
+          properties: { id: { type: string, format: uuid }, primaryTenantId: { type: ["string", "null"], format: uuid }, email: { type: string, format: email }, fullName: { type: string }, phone: { type: ["string", "null"] }, isPlatformSuperAdmin: { type: boolean }, mfaEnrolled: { type: boolean }, status: { $ref: "#/components/schemas/UserStatus" }, lastActiveAt: { type: ["string", "null"], format: date-time }, uiNavPinned: { type: boolean }, uiThemeMode: { $ref: "#/components/schemas/UiThemeMode" }, oidcProviderType: { $ref: "#/components/schemas/OidcProviderType" }, oidcSyncStatus: { $ref: "#/components/schemas/OidcSyncStatus" }, organizationCount: { type: integer } }
+    UserPageResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/UserSummary" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }
+    TargetOrgRoleInput:
+      type: object
+      required: [organizationId, roleId]
+      properties: { organizationId: { type: string, format: uuid }, roleId: { type: string, format: uuid }, accessExpiresOn: { type: ["string", "null"], format: date } }
+    InvitationDetail:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, tenantId, email, invitedByUserId, targetOrgRoles, consumesSeatQuota, status, expiresAt]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: string, format: uuid }, email: { type: string, format: email }, invitedByUserId: { type: string, format: uuid }, targetOrgRoles: { type: array, items: { $ref: "#/components/schemas/TargetOrgRoleInput" } }, welcomeMessage: { type: ["string", "null"] }, consumesSeatQuota: { type: boolean }, status: { $ref: "#/components/schemas/InvitationStatus" }, expiresAt: { type: string, format: date-time }, acceptedAt: { type: ["string", "null"], format: date-time } }
+    InvitationPageResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/InvitationDetail" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }
+    CreateInvitationsRequest:
+      type: object
+      required: [emails, targetOrgRoles]
+      properties: { emails: { type: array, minItems: 1, maxItems: 50, items: { type: string, format: email } }, targetOrgRoles: { type: array, minItems: 1, items: { $ref: "#/components/schemas/TargetOrgRoleInput" } }, welcomeMessage: { type: ["string", "null"], maxLength: 500 }, consumesSeatQuota: { type: boolean, default: true } }
+    SeatQuotaCheckResponse:
+      type: object
+      required: [seatLimit, activeSeatsUsed, pendingInviteSeats, proposedInviteCount, remainingSeats, allowed]
+      properties: { seatLimit: { type: integer }, activeSeatsUsed: { type: integer }, pendingInviteSeats: { type: integer }, proposedInviteCount: { type: integer }, remainingSeats: { type: integer }, allowed: { type: boolean }, warningMessage: { type: ["string", "null"] } }
+    InvitationVerifyResponse:
+      type: object
+      required: [tenantName, invitedByName, email, expiresAt, assignedOrganizations]
+      properties: { tenantName: { type: string }, invitedByName: { type: string }, email: { type: string, format: email }, welcomeMessage: { type: ["string", "null"] }, expiresAt: { type: string, format: date-time }, assignedOrganizations: { type: array, items: { type: object, required: [organizationName, roleName], properties: { organizationName: { type: string }, roleName: { type: string } } } } }
+    AcceptInvitationRequest:
+      type: object
+      required: [token, oidcCode, oidcCodeVerifier]
+      properties: { token: { type: string }, oidcCode: { type: string }, oidcCodeVerifier: { type: string } }
+    PermissionAtom:
+      type: object
+      required: [id, moduleCode, resourceKey, resourceLabel, action, permissionCode, isHighPrivilege]
+      properties: { id: { type: string, format: uuid }, moduleCode: { type: string }, resourceKey: { type: string }, resourceLabel: { type: string }, action: { $ref: "#/components/schemas/PermissionAction" }, permissionCode: { type: string }, description: { type: ["string", "null"] }, isHighPrivilege: { type: boolean } }
+    ModulePermissionGroup:
+      type: object
+      required: [moduleCode, displayName, isLockedByEntitlement, permissions]
+      properties: { moduleCode: { type: string }, displayName: { type: string }, isLockedByEntitlement: { type: boolean }, permissions: { type: array, items: { $ref: "#/components/schemas/PermissionAtom" } } }
+    RoleSummary:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, name, scope, isSystemDefault, isActive, permissionCount, assignedUserCount]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: ["string", "null"], format: uuid }, name: { type: string }, description: { type: ["string", "null"] }, scope: { $ref: "#/components/schemas/RoleScope" }, isSystemDefault: { type: boolean }, isActive: { type: boolean }, permissionCount: { type: integer }, assignedUserCount: { type: integer } }
+    RoleDetail:
+      allOf:
+        - $ref: "#/components/schemas/RoleSummary"
+        - type: object
+          required: [permissionIds, hasHighPrivilegePermissions]
+          properties: { permissionIds: { type: array, items: { type: string, format: uuid } }, hasHighPrivilegePermissions: { type: boolean } }
+    UpsertRoleRequest:
+      type: object
+      required: [name, scope, permissionIds]
+      properties: { name: { type: string, minLength: 2, maxLength: 120 }, description: { type: ["string", "null"], maxLength: 500 }, scope: { $ref: "#/components/schemas/RoleScope" }, permissionIds: { type: array, minItems: 1, items: { type: string, format: uuid } } }
+    OrganizationMembershipDetail:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, tenantId, organizationId, userId, roleId, membershipType, status, consumesSeatQuota]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: string, format: uuid }, organizationId: { type: string, format: uuid }, organizationName: { type: string }, userId: { type: string, format: uuid }, userFullName: { type: string }, roleId: { type: string, format: uuid }, roleName: { type: string }, membershipType: { $ref: "#/components/schemas/MembershipType" }, status: { $ref: "#/components/schemas/MembershipStatus" }, accessStartsOn: { type: ["string", "null"], format: date }, accessExpiresOn: { type: ["string", "null"], format: date }, consumesSeatQuota: { type: boolean } }
+    MembershipPageResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/OrganizationMembershipDetail" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }
+    BulkAssignMembershipsRequest:
+      type: object
+      required: [userId, assignments]
+      properties: { userId: { type: string, format: uuid }, membershipType: { $ref: "#/components/schemas/MembershipType", default: INTERNAL_STAFF }, assignments: { type: array, minItems: 1, items: { $ref: "#/components/schemas/TargetOrgRoleInput" } } }
+    UpdateMembershipRequest:
+      type: object
+      properties: { roleId: { type: string, format: uuid }, status: { $ref: "#/components/schemas/MembershipStatus" }, accessStartsOn: { type: ["string", "null"], format: date }, accessExpiresOn: { type: ["string", "null"], format: date } }
+    EffectivePermissionsResponse:
+      type: object
+      required: [tenantId, organizationId, userId, permissions]
+      properties: { tenantId: { type: string, format: uuid }, organizationId: { type: string, format: uuid }, userId: { type: string, format: uuid }, permissions: { type: array, items: { type: object, required: [roleName, moduleCode, permissionCode, isEntitlementActive], properties: { roleName: { type: string }, moduleCode: { type: string }, permissionCode: { type: string }, isEntitlementActive: { type: boolean } } } } }
+    SubscriptionPlan:
+      type: object
+      required: [id, code, name, targetCustomerType, defaultSeatLimit, defaultOrgLimit, annualBasePrice, monthlyBasePrice, currencyCode, isActive]
+      properties: { id: { type: string, format: uuid }, code: { type: string }, name: { type: string }, targetCustomerType: { $ref: "#/components/schemas/CustomerType" }, defaultSeatLimit: { type: integer }, defaultOrgLimit: { type: integer }, annualBasePrice: { $ref: "#/components/schemas/DecimalAmount" }, monthlyBasePrice: { $ref: "#/components/schemas/DecimalAmount" }, currencyCode: { type: string }, isActive: { type: boolean } }
+    TenantModuleSubscription:
+      type: object
+      required: [moduleCode, displayName, status, featureFlags, enabledOrgCount, totalOrgCount]
+      properties: { moduleCode: { type: string }, displayName: { type: string }, status: { $ref: "#/components/schemas/ModuleSubscriptionStatus" }, moduleSeatLimit: { type: ["integer", "null"] }, featureFlags: { type: object, additionalProperties: { type: boolean } }, enabledOrgCount: { type: integer }, totalOrgCount: { type: integer }, activatedAt: { type: ["string", "null"], format: date-time } }
+    CurrentSubscriptionResponse:
+      type: object
+      required: [id, tenantId, plan, billingCycle, status, contractValue, currencyCode, seatLimit, orgLimit, currentPeriodStartOn, currentPeriodEndOn, renewalDate, quota, modules]
+      properties: { id: { type: string, format: uuid }, tenantId: { type: string, format: uuid }, plan: { $ref: "#/components/schemas/SubscriptionPlan" }, billingCycle: { $ref: "#/components/schemas/BillingCycle" }, status: { $ref: "#/components/schemas/SubscriptionStatus" }, contractValue: { $ref: "#/components/schemas/DecimalAmount" }, currencyCode: { type: string }, seatLimit: { type: integer }, orgLimit: { type: integer }, currentPeriodStartOn: { type: string, format: date }, currentPeriodEndOn: { type: string, format: date }, renewalDate: { type: string, format: date }, trialEndsOn: { type: ["string", "null"], format: date }, quota: { $ref: "#/components/schemas/TenantQuotaUtilization" }, modules: { type: array, items: { $ref: "#/components/schemas/TenantModuleSubscription" } } }
+    OrgModuleEntitlement:
+      type: object
+      required: [organizationId, organizationName, moduleCode, isEnabled, featureOverrides]
+      properties: { organizationId: { type: string, format: uuid }, organizationName: { type: string }, moduleCode: { type: string }, isEnabled: { type: boolean }, allocatedSeatLimit: { type: ["integer", "null"] }, featureOverrides: { type: object, additionalProperties: { type: boolean } } }
+    EntitlementMatrixResponse:
+      type: object
+      required: [tenantId, rows]
+      properties: { tenantId: { type: string, format: uuid }, rows: { type: array, items: { $ref: "#/components/schemas/OrgModuleEntitlement" } } }
+    UpdateOrgEntitlementRequest:
+      type: object
+      required: [isEnabled]
+      properties: { isEnabled: { type: boolean }, allocatedSeatLimit: { type: ["integer", "null"], minimum: 1 }, featureOverrides: { type: object, additionalProperties: { type: boolean } } }
+    SubscriptionChangeImpact:
+      type: object
+      required: [hardBlockers, softWarnings, affectedUsersCount, affectedOrgsCount, modulesChanged]
+      properties: { hardBlockers: { type: array, items: { type: string } }, softWarnings: { type: array, items: { type: string } }, affectedUsersCount: { type: integer }, affectedOrgsCount: { type: integer }, modulesChanged: { type: array, items: { type: string } } }
+    SubscriptionChangeLog:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, tenantId, subscriptionId, changeType, effectiveTiming, effectiveOn, prorationAmount, currencyCode, impactSummary, status]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: string, format: uuid }, subscriptionId: { type: string, format: uuid }, changeType: { $ref: "#/components/schemas/SubscriptionChangeType" }, effectiveTiming: { $ref: "#/components/schemas/ChangeEffectiveTiming" }, effectiveOn: { type: string, format: date }, prorationAmount: { $ref: "#/components/schemas/DecimalAmount" }, currencyCode: { type: string }, impactSummary: { $ref: "#/components/schemas/SubscriptionChangeImpact" }, confirmationTokenTyped: { type: ["string", "null"] }, confirmedAt: { type: ["string", "null"], format: date-time }, status: { $ref: "#/components/schemas/SubscriptionChangeStatus" } }
+    SubscriptionChangePreviewRequest:
+      type: object
+      required: [effectiveTiming]
+      properties: { targetPlanCode: { type: string }, billingCycle: { $ref: "#/components/schemas/BillingCycle" }, targetSeatLimit: { type: integer, minimum: 1 }, targetOrgLimit: { type: integer, minimum: 1 }, enableModules: { type: array, items: { type: string } }, disableModules: { type: array, items: { type: string } }, effectiveTiming: { $ref: "#/components/schemas/ChangeEffectiveTiming" } }
+    ConfirmSubscriptionChangeRequest:
+      type: object
+      required: [changeLogId, acknowledgedSoftWarnings]
+      properties: { changeLogId: { type: string, format: uuid }, acknowledgedSoftWarnings: { type: boolean }, confirmationTokenTyped: { type: ["string", "null"] } }
+    SubscriptionChangePageResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/SubscriptionChangeLog" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }
+    PlatformConfigItem:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, category, configKey, configValue, isSensitive, requiresImpactConfirmation, version]
+          properties: { id: { type: string, format: uuid }, scopeTenantId: { type: ["string", "null"], format: uuid }, category: { $ref: "#/components/schemas/ConfigCategory" }, configKey: { type: string }, configValue: { type: object, additionalProperties: true }, isSensitive: { type: boolean }, requiresImpactConfirmation: { type: boolean }, version: { type: integer } }
+    UpdatePlatformConfigRequest:
+      type: object
+      required: [configKey, configValue, expectedVersion]
+      properties: { configKey: { type: string }, configValue: { type: object, additionalProperties: true }, expectedVersion: { type: integer, minimum: 1 }, impactConfirmed: { type: boolean, default: false } }
+    ApiKeySummary:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, name, keyPrefix, scopes, status]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: ["string", "null"], format: uuid }, name: { type: string }, keyPrefix: { type: string }, scopes: { type: array, items: { type: string } }, status: { $ref: "#/components/schemas/ApiKeyStatus" }, lastUsedAt: { type: ["string", "null"], format: date-time }, expiresAt: { type: ["string", "null"], format: date-time } }
+    CreateApiKeyRequest:
+      type: object
+      required: [name, scopes]
+      properties: { name: { type: string, minLength: 2, maxLength: 120 }, scopes: { type: array, minItems: 1, items: { type: string } }, expiresAt: { type: ["string", "null"], format: date-time } }
+    ApiKeyCreatedResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiKeySummary"
+        - type: object
+          required: [plaintextSecret]
+          properties: { plaintextSecret: { type: string } }
+    WebhookEndpointSummary:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, url, subscribedEvents, status]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: ["string", "null"], format: uuid }, url: { type: string, format: uri }, subscribedEvents: { type: array, items: { type: string } }, status: { $ref: "#/components/schemas/WebhookStatus" }, lastDeliveryHttpCode: { type: ["integer", "null"] }, lastDeliveredAt: { type: ["string", "null"], format: date-time } }
+    CreateWebhookRequest:
+      type: object
+      required: [url, subscribedEvents]
+      properties: { url: { type: string, format: uri }, subscribedEvents: { type: array, minItems: 1, items: { type: string } } }
+    UpdateWebhookRequest:
+      type: object
+      properties: { url: { type: string, format: uri }, subscribedEvents: { type: array, items: { type: string } }, status: { $ref: "#/components/schemas/WebhookStatus" } }
+    AuditLogSummary:
+      type: object
+      required: [id, eventCode, actorNameSnapshot, serviceSource, actionCategory, eventAction, targetResourceType, outcome, retentionUntilOn, createdBy, createdAt]
+      properties: { id: { type: string, format: uuid }, eventCode: { type: string }, tenantId: { type: ["string", "null"], format: uuid }, organizationId: { type: ["string", "null"], format: uuid }, actorNameSnapshot: { type: string }, actorRoleSnapshot: { type: ["string", "null"] }, serviceSource: { type: string }, actionCategory: { $ref: "#/components/schemas/AuditCategory" }, eventAction: { type: string }, targetResourceType: { type: string }, targetResourceId: { type: ["string", "null"] }, outcome: { $ref: "#/components/schemas/AuditOutcome" }, httpStatusCode: { type: ["integer", "null"] }, otelTraceId: { type: ["string", "null"] }, ipAddress: { type: ["string", "null"] }, retentionUntilOn: { type: string, format: date }, createdBy: { type: string, format: uuid }, createdAt: { type: string, format: date-time } }
+    AuditLogDetail:
+      allOf:
+        - $ref: "#/components/schemas/AuditLogSummary"
+        - type: object
+          properties: { actorUserId: { type: ["string", "null"], format: uuid }, actorOidcSub: { type: ["string", "null"] }, userAgent: { type: ["string", "null"] }, beforeState: { type: ["object", "null"], additionalProperties: true }, afterState: { type: ["object", "null"], additionalProperties: true } }
+    AuditLogCursorResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditLogSummary" } }, pagination: { $ref: "#/components/schemas/CursorPaginationMeta" } }
+    AuditLogExportRequest:
+      type: object
+      required: [format]
+      properties: { format: { type: string, enum: [CSV, JSON] }, from: { type: string, format: date-time }, to: { type: string, format: date-time }, serviceSource: { type: string }, actionCategory: { $ref: "#/components/schemas/AuditCategory" }, outcome: { $ref: "#/components/schemas/AuditOutcome" } }
+    AuditLogExportResponse:
+      type: object
+      required: [exportId, format, status]
+      properties: { exportId: { type: string, format: uuid }, format: { type: string, enum: [CSV, JSON] }, status: { type: string, enum: [QUEUED, READY] }, downloadUrl: { type: ["string", "null"], format: uri } }
+    NotificationChannelConfig:
+      type: object
+      required: [id, channel, providerName, status]
+      properties: { id: { type: string, format: uuid }, channel: { $ref: "#/components/schemas/NotificationChannel" }, providerName: { type: string }, status: { $ref: "#/components/schemas/ServiceHealth" } }
+    NotificationRoutingRule:
+      allOf:
+        - $ref: "#/components/schemas/AuditFields"
+        - type: object
+          required: [id, eventKey, eventLabel, eventCategory, inAppEnabled, emailMode, webhookEnabled, recipientRoleNames, templateSubject, templateBody]
+          properties: { id: { type: string, format: uuid }, tenantId: { type: ["string", "null"], format: uuid }, eventKey: { type: string }, eventLabel: { type: string }, eventCategory: { $ref: "#/components/schemas/NotificationCategory" }, inAppEnabled: { type: boolean }, emailMode: { $ref: "#/components/schemas/EmailRoutingMode" }, webhookEnabled: { type: boolean }, recipientRoleNames: { type: array, items: { type: string } }, templateSubject: { type: string }, templateBody: { type: string } }
+    UpdateNotificationRuleRequest:
+      type: object
+      properties: { inAppEnabled: { type: boolean }, emailMode: { $ref: "#/components/schemas/EmailRoutingMode" }, webhookEnabled: { type: boolean }, recipientRoleNames: { type: array, items: { type: string } }, templateSubject: { type: string }, templateBody: { type: string } }
+    UserNotificationPreference:
+      type: object
+      required: [eventCategory, inAppEnabled, emailEnabled, deliveryCadence, digestTimezone, muteNonCritical]
+      properties: { eventCategory: { $ref: "#/components/schemas/NotificationCategory" }, inAppEnabled: { type: boolean }, emailEnabled: { type: boolean }, deliveryCadence: { $ref: "#/components/schemas/DeliveryCadence" }, digestTimeLocal: { oneOf: [{ $ref: "#/components/schemas/LocalWallTime" }, { type: "null" }] }, digestTimezone: { type: string }, muteNonCritical: { type: boolean }, muteStartLocal: { oneOf: [{ $ref: "#/components/schemas/LocalWallTime" }, { type: "null" }] }, muteEndLocal: { oneOf: [{ $ref: "#/components/schemas/LocalWallTime" }, { type: "null" }] } }
+    UpsertUserNotificationPreference:
+      $ref: "#/components/schemas/UserNotificationPreference"
+    NotificationDelivery:
+      type: object
+      required: [id, eventKey, channel, subject, deliveryStatus, attemptCount, isRead, createdAt]
+      properties: { id: { type: string, format: uuid }, tenantId: { type: ["string", "null"], format: uuid }, recipientUserId: { type: ["string", "null"], format: uuid }, eventKey: { type: string }, channel: { $ref: "#/components/schemas/NotificationChannel" }, subject: { type: string }, deliveryStatus: { $ref: "#/components/schemas/DeliveryStatus" }, bullmqJobId: { type: ["string", "null"] }, attemptCount: { type: integer }, lastError: { type: ["string", "null"] }, isRead: { type: boolean }, readAt: { type: ["string", "null"], format: date-time }, sentAt: { type: ["string", "null"], format: date-time }, createdAt: { type: string, format: date-time } }
+    NotificationDeliveryPageResponse:
+      type: object
+      required: [items, pagination]
+      properties: { items: { type: array, items: { $ref: "#/components/schemas/NotificationDelivery" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }
+    NotificationInboxResponse:
+      type: object
+      required: [unreadCount, items, pagination]
+      properties: { unreadCount: { type: integer }, items: { type: array, items: { $ref: "#/components/schemas/NotificationDelivery" } }, pagination: { $ref: "#/components/schemas/OffsetPaginationMeta" } }

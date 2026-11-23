@@ -1,0 +1,42 @@
+PROPRIETARY SOFTWARE LICENSE — ALL RIGHTS RESERVED
+
+Copyright (c) 2026 Krishna Kant (kantkrishna@hotmail.com)
+All rights reserved.
+
+Project: Advantax Tax METRix — Platform Core Service (metrix-core-backend)
+
+OWNERSHIP & CONFIDENTIALITY
+This software, including its source code, database schemas, Row-Level Security
+(RLS) definitions, OpenAPI specifications, scripts, tests, configuration files,
+and associated documentation (collectively, the "Software"), is the private,
+proprietary, and confidential intellectual property of Krishna Kant
+(kantkrishna@hotmail.com) (the "Licensor").
+
+RESTRICTIONS
+No license or right—express, implied, or by estoppel—is granted to any party
+without the prior express written permission of the Licensor. Without such
+written authorization, you may not:
+(a) use, execute, copy, or reproduce the Software in whole or in part;
+(b) modify, adapt, translate, or create derivative works based on the
+Software;
+(c) distribute, publish, display, disclose, sell, rent, lease, sublicense,
+or otherwise transfer the Software to any third party; or
+(d) remove, obscure, or alter any copyright, proprietary, or confidentiality
+notices contained in the Software.
+
+AUTHORIZED ACCESS
+Any access granted to employees, contractors, or collaborators is strictly
+limited to the purpose authorized in writing by the Licensor and remains
+subject to confidentiality obligations and immediate revocation upon request.
+
+NO WARRANTY & LIMITATION OF LIABILITY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+CONTACT
+For licensing inquiries or written permissions, contact:
+Krishna Kant (kantkrishna@hotmail.com)

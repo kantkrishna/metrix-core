@@ -1,0 +1,74 @@
+{
+  "name": "@advantax-metrix/platform-core-service",
+  "version": "1.1.0",
+  "description": "Advantax Tax METRix — Platform Core Microservice (NestJS 12, Drizzle ORM, PostgreSQL FORCE RLS, OpenAPI 3.1 incl. GET /me/modules & Vitest 5)",
+  "private": true,
+  "engines": {
+    "node": ">=20.11.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/main",
+    "typecheck": "tsc --noEmit",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push --force",
+    "db:migrate:rls": "tsx scripts/apply-rls.ts",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
+    "db:bootstrap": "npm run db:push && npm run db:migrate:rls && npm run db:seed",
+    "openapi:validate": "node scripts/validate-openapi.mjs",
+    "test:unit": "vitest run test/unit test/contract",
+    "test:integration": "vitest run test/integration",
+    "verify:all": "npm run typecheck && npm run openapi:validate && npm run test:unit && npm run test:integration"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.6.0",
+    "@nestjs/config": "^12.1.1",
+    "@nestjs/core": "^12.6.0",
+    "@nestjs/platform-express": "^12.6.0",
+    "bullmq": "^6.7.8",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "decimal.js": "^10.4.3",
+    "drizzle-orm": "^0.45.4",
+    "helmet": "^8.0.0",
+    "ioredis": "^6.0.0",
+    "pg": "^8.13.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.15",
+    "@testcontainers/postgresql": "^12.2.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "dotenv": "^18.0.10",
+    "drizzle-kit": "^0.31.11",
+    "testcontainers": "^12.2.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.3",
+    "vitest": "^5.1.1"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2",
+    "glob": "^14.0.6",
+    "@esbuild-kit/esm-loader": "npm:tsx@^4.23.15",
+    "@esbuild-kit/core-utils": "npm:tsx@^4.23.15",
+    "node-abort-controller": "file:./scripts/shims/node-abort-controller"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "@nestjs/core": false,
+    "msgpackr-extract": false,
+    "protobufjs": false,
+    "ssh2": false,
+    "cpu-features": false
+  }
+}
