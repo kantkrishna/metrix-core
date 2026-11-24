@@ -1,0 +1,27 @@
+# metrix-core/frontend/docker-compose.yml
+#
+# Purpose: Provides reproducible local container orchestration to build, start,
+# stop, and verify the METRix Platform Core frontend container.
+#
+# Context: Connects to the local Platform Core NestJS API Gateway on port 4001.
+#
+# Implementation Specs: Exposes port 3000 and mounts public runtime variables.
+
+services:
+  platform-core-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: metrix-platform-core-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_APP_NAME=METRix Platform Core
+      - NEXT_PUBLIC_PLATFORM_CORE_API_URL=http://localhost:4001/api/v1/core
+      - NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
+      - NEXT_PUBLIC_DEFAULT_LOCALE=en-IN
+      - NEXT_PUBLIC_DEFAULT_TIMEZONE=Asia/Kolkata
+      - NEXT_PUBLIC_DEFAULT_CURRENCY=INR
+      - NEXT_PUBLIC_ENABLE_MULTI_LANGUAGE=false
+    restart: unless-stopped

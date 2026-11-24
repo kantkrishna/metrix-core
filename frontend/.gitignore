@@ -1,0 +1,23 @@
+# metrix-core/frontend/.gitignore
+#
+# Purpose: Excludes build outputs, dependencies, coverage reports, Playwright
+# artifacts, and local secret files from version control.
+#
+# Context: Maintains clean repository hygiene for the METRix Platform Core
+# Next.js frontend repository.
+#
+# Implementation Specs: Covers Node.js, Next.js, Vitest, Playwright, and IDE files.
+
+node_modules/
+.next/
+out/
+build/
+coverage/
+playwright-report/
+test-results/
+.env*.local
+.env
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+Thumbs.db

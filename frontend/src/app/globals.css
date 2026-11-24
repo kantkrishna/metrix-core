@@ -1,0 +1,347 @@
+/*
+ * metrix-core/frontend/src/app/globals.css
+ *
+ * Purpose: Defines the Tailwind CSS v4 @theme inline design token bridge and
+ * Light (:root) / Dark (.dark) palettes for METRix Platform Core.
+ *
+ * Context: Mapped 1:1 to design-tokens.tokens.json (76 Figma Variables) and
+ * shadcn/ui semantic variables with WCAG 2.1 AA contrast compliance.
+ *
+ * Implementation Specs: Uses @custom-variant dark for class-based Dark/System
+ * mode toggling and logical spacing compatibility for future I18N.
+ */
+
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-background-1: var(--background-1);
+  --color-background-2: var(--background-2);
+  --color-background-plain: var(--background-plain);
+  --color-foreground: var(--foreground);
+  --color-foreground-inverse: var(--foreground-inverse);
+  --color-inverse: var(--inverse);
+
+  --color-border: var(--border);
+  --color-border-line-1: var(--border-line-1);
+  --color-border-line-2: var(--border-line-2);
+  --color-border-line-3: var(--border-line-3);
+  --color-border-line-4: var(--border-line-4);
+  --color-border-line-5: var(--border-line-5);
+  --color-border-line-6: var(--border-line-6);
+
+  --color-primary-50: var(--primary-50);
+  --color-primary-100: var(--primary-100);
+  --color-primary-200: var(--primary-200);
+  --color-primary-300: var(--primary-300);
+  --color-primary-400: var(--primary-400);
+  --color-primary-500: var(--primary-500);
+  --color-primary-600: var(--primary-600);
+  --color-primary-700: var(--primary-700);
+  --color-primary-800: var(--primary-800);
+  --color-primary-900: var(--primary-900);
+  --color-primary-950: var(--primary-950);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-focus: var(--primary-focus);
+  --color-primary-active: var(--primary-active);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+
+  --color-layer: var(--layer);
+  --color-layer-line: var(--layer-line);
+  --color-layer-hover: var(--layer-hover);
+
+  --color-surface: var(--surface);
+  --color-surface-1: var(--surface-1);
+  --color-surface-foreground: var(--surface-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-foreground-1: var(--muted-foreground-1);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-status-destructive-bg: var(--status-destructive-bg);
+  --color-status-success: var(--status-success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-info: var(--status-info);
+  --color-status-info-bg: var(--status-info-bg);
+
+  --color-navbar: var(--navbar);
+  --color-navbar-border: var(--navbar-border);
+  --color-navbar-nav-foreground: var(--navbar-nav-foreground);
+  --color-navbar-inverse: var(--navbar-inverse);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-nav-foreground: var(--sidebar-nav-foreground);
+  --color-sidebar-nav-active: var(--sidebar-nav-active);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-border: var(--card-border);
+  --color-card-header: var(--card-header);
+
+  --color-dropdown: var(--dropdown);
+  --color-select: var(--select);
+  --color-overlay: var(--overlay);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-tooltip: var(--tooltip);
+  --color-tooltip-foreground: var(--tooltip-foreground);
+
+  --color-table-border: var(--table-border);
+
+  --color-chart-primary: var(--chart-primary);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* shadcn/ui standard aliases */
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+}
+
+/* Light Mode (:root) — Cool Slate Enterprise Console */
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --background-1: #f8fafc;
+  --background-2: #f1f5f9;
+  --background-plain: #ffffff;
+  --foreground: #0f172a;
+  --foreground-inverse: #ffffff;
+  --inverse: #0f172a;
+
+  --border: #e2e8f0;
+  --border-line-1: #f1f5f9;
+  --border-line-2: #e2e8f0;
+  --border-line-3: #cbd5e1;
+  --border-line-4: #94a3b8;
+  --border-line-5: #64748b;
+  --border-line-6: #475569;
+
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  --primary-900: #1e3a8a;
+  --primary-950: #172554;
+
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1d4ed8;
+  --primary-focus: #1d4ed8;
+  --primary-active: #1e40af;
+
+  --secondary: #0f172a;
+  --secondary-foreground: #ffffff;
+  --secondary-hover: #1e293b;
+
+  --layer: #ffffff;
+  --layer-line: #e2e8f0;
+  --layer-hover: #f8fafc;
+
+  --surface: #f1f5f9;
+  --surface-1: #e2e8f0;
+  --surface-foreground: #0f172a;
+
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  --muted-foreground-1: #475569;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --status-destructive-bg: #fef2f2;
+  --status-success: #059669;
+  --status-success-bg: #ecfdf5;
+  --status-warning: #d97706;
+  --status-warning-bg: #fffbeb;
+  --status-info: #2563eb;
+  --status-info-bg: #eff6ff;
+
+  --navbar: #ffffff;
+  --navbar-border: #e2e8f0;
+  --navbar-nav-foreground: #0f172a;
+  --navbar-inverse: #0f172a;
+
+  --sidebar: #ffffff;
+  --sidebar-border: #e2e8f0;
+  --sidebar-nav-foreground: #334155;
+  --sidebar-nav-active: #eff6ff;
+
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --card-border: #e2e8f0;
+  --card-header: #f8fafc;
+
+  --dropdown: #ffffff;
+  --select: #ffffff;
+  --overlay: #ffffff;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  --tooltip: #0f172a;
+  --tooltip-foreground: #ffffff;
+
+  --table-border: #e2e8f0;
+
+  --chart-primary: #2563eb;
+  --chart-1: #eff6ff;
+  --chart-2: #bfdbfe;
+  --chart-3: #60a5fa;
+  --chart-4: #1e40af;
+  --chart-5: #7c3aed;
+
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --input: #cbd5e1;
+  --ring: #2563eb;
+}
+
+/* Dark Mode (.dark) — Deep Zinc / Obsidian Enterprise Console */
+.dark {
+  color-scheme: dark;
+  --background: #09090b;
+  --background-1: #111318;
+  --background-2: #18181b;
+  --background-plain: #09090b;
+  --foreground: #f8fafc;
+  --foreground-inverse: #09090b;
+  --inverse: #f8fafc;
+
+  --border: #27272a;
+  --border-line-1: #18181b;
+  --border-line-2: #27272a;
+  --border-line-3: #3f3f46;
+  --border-line-4: #52525b;
+  --border-line-5: #71717a;
+  --border-line-6: #a1a1aa;
+
+  --primary-50: #172554;
+  --primary-100: #1e3a8a;
+  --primary-200: #1e40af;
+  --primary-300: #1d4ed8;
+  --primary-400: #2563eb;
+  --primary-500: #3b82f6;
+  --primary-600: #60a5fa;
+  --primary-700: #93c5fd;
+  --primary-800: #bfdbfe;
+  --primary-900: #dbeafe;
+  --primary-950: #eff6ff;
+
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --primary-hover: #2563eb;
+  --primary-focus: #60a5fa;
+  --primary-active: #1d4ed8;
+
+  --secondary: #f8fafc;
+  --secondary-foreground: #09090b;
+  --secondary-hover: #e2e8f0;
+
+  --layer: #111318;
+  --layer-line: #27272a;
+  --layer-hover: #18181b;
+
+  --surface: #18181b;
+  --surface-1: #27272a;
+  --surface-foreground: #e2e8f0;
+
+  --muted: #18181b;
+  --muted-foreground: #94a3b8;
+  --muted-foreground-1: #cbd5e1;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --status-destructive-bg: #450a0a;
+  --status-success: #34d399;
+  --status-success-bg: #064e3b;
+  --status-warning: #fbbf24;
+  --status-warning-bg: #451a03;
+  --status-info: #60a5fa;
+  --status-info-bg: #172554;
+
+  --navbar: #111318;
+  --navbar-border: #27272a;
+  --navbar-nav-foreground: #f8fafc;
+  --navbar-inverse: #09090b;
+
+  --sidebar: #111318;
+  --sidebar-border: #27272a;
+  --sidebar-nav-foreground: #cbd5e1;
+  --sidebar-nav-active: #172554;
+
+  --card: #111318;
+  --card-foreground: #f8fafc;
+  --card-border: #27272a;
+  --card-header: #18181b;
+
+  --dropdown: #18181b;
+  --select: #18181b;
+  --overlay: #111318;
+  --popover: #18181b;
+  --popover-foreground: #f8fafc;
+
+  --tooltip: #f8fafc;
+  --tooltip-foreground: #09090b;
+
+  --table-border: #27272a;
+
+  --chart-primary: #3b82f6;
+  --chart-1: #172554;
+  --chart-2: #1e40af;
+  --chart-3: #3b82f6;
+  --chart-4: #93c5fd;
+  --chart-5: #a855f7;
+
+  --accent: #18181b;
+  --accent-foreground: #f8fafc;
+  --input: #3f3f46;
+  --ring: #3b82f6;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background-1);
+    color: var(--foreground);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
