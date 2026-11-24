@@ -1,14 +1,14 @@
-// metrix-core/frontend/tests/unit/oidc-auth-workspace.spec.tsx
+// frontend/tests/unit/oidc-auth-workspace.spec.tsx
 /*
-Purpose: Verifies US-01.1 acceptance criteria and BDD scenarios for delegated
-OIDC sign-in, Enterprise SSO routing, multi-tenant workspace selection,
-suspended account denial, and failed OIDC callback recovery.
+Purpose: Verifies US-01.1 acceptance criteria and BDD scenarios for delegated OIDC
+sign-in, Enterprise SSO routing, multi-tenant workspace selection, suspended
+account denial, and failed OIDC callback recovery.
 
-Context: Enforces FR-CORE-001, FR-CORE-002, BR-003, and BR-004 with zero
-password capture in Platform Core.
+Context: Enforces FR-CORE-001, FR-CORE-002, BR-003, and BR-004 with zero password
+capture in Platform Core.
 
 Implementation Specs: Vitest 5 + React Testing Library + userEvent against
-PlatformCoreApi using fresh Response objects per fetch invocation.
+PlatformCoreApi using mocked fetch responses.
 */
 
 import React from "react";
@@ -38,8 +38,8 @@ function renderWithProviders(ui: React.ReactElement) {
   );
 }
 
-describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
-  it("discovers Enterprise SSO URL without rendering any password input", async () => {
+describe("US-01.1 Delegated OIDC Sign-In & Multi-Tenant Workspace Selection", () => {
+  it("discovers Enterprise SSO OIDC URL without rendering any password input", async () => {
     const user = userEvent.setup();
     const redirectSpy = vi.fn();
 
@@ -50,8 +50,7 @@ describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
           new Response(
             JSON.stringify({
               providerType: "ENTRA_ID_SSO",
-              authorizationUrl:
-                "https://id.metrix-erp.cloud/authorize?client=core",
+              authorizationUrl: "https://id.metrix-erp.cloud/authorize?client=core",
               issuerUrl: "https://id.metrix-erp.cloud/realms/platform-core",
             }),
             { status: 200, headers: { "Content-Type": "application/json" } }
@@ -83,7 +82,7 @@ describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lands single-tenant admin directly on /dashboard after callback", async () => {
+  it("lands single-tenant admin directly on /dashboard after OIDC callback", async () => {
     const onNavigate = vi.fn();
     window.sessionStorage.setItem("metrix.oidc.state", "state-123");
     window.sessionStorage.setItem("metrix.oidc.verifier", "verifier-abc");
@@ -134,7 +133,7 @@ describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
     vi.unstubAllGlobals();
   });
 
-  it("filters multi-tenant workspaces and persists remembered workspace", async () => {
+  it("routes multi-tenant admin to /workspaces and filters selectable tenants", async () => {
     const user = userEvent.setup();
     const onSelected = vi.fn();
     const fetchMock = vi.fn().mockImplementation(() =>
@@ -177,10 +176,7 @@ describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
       />
     );
 
-    await user.type(
-      screen.getByPlaceholderText(/search workspaces/i),
-      "Kulkarni"
-    );
+    await user.type(screen.getByPlaceholderText(/search workspaces/i), "Kulkarni");
     expect(
       screen.getByText("Kulkarni, Deshmukh & Associates LLP")
     ).toBeInTheDocument();
@@ -220,10 +216,7 @@ describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
               status: 403,
               detail: "Tenant Zenith Advisory Services is suspended.",
             }),
-            {
-              status: 403,
-              headers: { "Content-Type": "application/problem+json" },
-            }
+            { status: 403, headers: { "Content-Type": "application/problem+json" } }
           )
         )
       )
@@ -237,18 +230,23 @@ describe("US-01.1 Delegated OIDC Sign-In & Workspace Selection", () => {
       />
     );
 
-    expect(await screen.findByText(/currently suspended/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/currently suspended/i)
+    ).toBeInTheDocument();
     expect(onNavigate).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
   });
 
-  it("renders recoverable error with Retry when OIDC callback fails", async () => {
+  it("renders a recoverable error with Retry when OIDC callback is cancelled", async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
 
     renderWithProviders(
-      <OidcCallbackView oidcError="access_denied" onNavigate={onNavigate} />
+      <OidcCallbackView
+        oidcError="access_denied"
+        onNavigate={onNavigate}
+      />
     );
 
     expect(

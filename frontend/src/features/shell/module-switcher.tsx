@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/shell/module-switcher.tsx
+// frontend/src/features/shell/module-switcher.tsx
 /*
 Purpose: Renders the permission-driven Unified Module Switcher popover in the
 persistent Top Bar for switching between Platform Core and enabled downstream

@@ -1,4 +1,4 @@
-// metrix-core/frontend/next.config.ts
+// frontend/next.config.ts
 /*
 Purpose: Configures the Next.js App Router runtime, standalone production bundle,
 and baseline HTTP security headers for METRix Platform Core.

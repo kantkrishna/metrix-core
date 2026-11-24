@@ -1,4 +1,4 @@
-// metrix-core/frontend/playwright.config.ts
+// frontend/playwright.config.ts
 /*
 Purpose: Configures Playwright end-to-end browser testing across desktop and
 responsive tablet viewports.

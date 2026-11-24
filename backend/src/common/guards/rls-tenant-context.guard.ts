@@ -1,4 +1,4 @@
-// src/common/guards/rls-tenant-context.guard.ts
+// backend/src/common/guards/rls-tenant-context.guard.ts
 //
 // Purpose: Validates authenticated principal context, tenant/org UUID headers, and effective RBAC permission grants.
 //

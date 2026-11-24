@@ -6,8 +6,9 @@ suspended-account denials or cancelled callbacks cleanly.
 
 Context: Satisfies US-01.1 AC 3, AC 4, AC 5, and AC 6.
 
-Implementation Specs: StrictMode-safe async PKCE exchange calling
-POST /api/v1/core/auth/oidc/callback without synchronous setState in effects.
+Implementation Specs: Executes POST /api/v1/core/auth/oidc/callback once per
+callback mount safely under React 19 StrictMode without discarding in-flight
+responses.
 */
 
 "use client";
@@ -38,41 +39,58 @@ export function OidcCallbackView({
   const { t } = useTranslations();
   const { establishSession } = useSession();
   const startedRef = useRef(false);
-  const hasMissingParams = Boolean(oidcError || !code || !state);
+  const mountedRef = useRef(true);
+  const onNavigateRef = useRef(onNavigate);
+
+  useEffect(() => {
+    onNavigateRef.current = onNavigate;
+  }, [onNavigate]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const [failure, setFailure] = useState<{
     suspended: boolean;
     message: string;
   } | null>(() =>
-    hasMissingParams
+    oidcError || !code || !state
       ? { suspended: false, message: t("auth.callbackErrorDetail") }
       : null
   );
 
   useEffect(() => {
-    if (startedRef.current || hasMissingParams || !code || !state) return;
+    if (startedRef.current || oidcError || !code || !state) return;
     startedRef.current = true;
 
-    void Promise.resolve().then(async () => {
-      const tx = consumeOidcTransaction(state);
-      if (!tx.valid || !tx.codeVerifier) {
-        setFailure({ suspended: false, message: t("auth.callbackErrorDetail") });
-        return;
-      }
-
-      try {
-        const response = await coreApi.completeOidcCallback({
-          code,
-          state,
-          codeVerifier: tx.codeVerifier,
+    const tx = consumeOidcTransaction(state);
+    if (!tx.valid || !tx.codeVerifier) {
+      queueMicrotask(() => {
+        if (!mountedRef.current) return;
+        setFailure({
+          suspended: false,
+          message: t("auth.callbackErrorDetail"),
         });
+      });
+      return;
+    }
+
+    coreApi
+      .completeOidcCallback({ code, state, codeVerifier: tx.codeVerifier })
+      .then((response) => {
+        if (!mountedRef.current) return;
         const autoTenantId = establishSession(response);
         if (response.workspaces.length > 1 && !autoTenantId) {
-          onNavigate("/workspaces");
+          onNavigateRef.current("/workspaces");
         } else {
-          onNavigate("/dashboard");
+          onNavigateRef.current("/dashboard");
         }
-      } catch (err: unknown) {
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         if (err instanceof ApiProblemError && err.status === 403) {
           setFailure({
             suspended: true,
@@ -84,9 +102,8 @@ export function OidcCallbackView({
           suspended: false,
           message: t("auth.callbackErrorDetail"),
         });
-      }
-    });
-  }, [code, establishSession, hasMissingParams, onNavigate, state, t]);
+      });
+  }, [code, establishSession, oidcError, state, t]);
 
   return (
     <main

@@ -1,4 +1,4 @@
-// metrix-core/frontend/tests/unit/executive-dashboard.spec.tsx
+// frontend/tests/unit/executive-dashboard.spec.tsx
 /*
 Purpose: Verifies US-01.2 acceptance criteria for the Platform Core Executive
 Dashboard: 4 KPI summaries, CustomerType and TenantStatus filtering, governance
@@ -7,8 +7,7 @@ alert feed, 5-row high-risk audit strip, loading skeletons, and retryable error.
 Context: Validates FR-CORE-003 and tenant-scoped dashboard hydration from
 GET /api/v1/core/dashboard/summary.
 
-Implementation Specs: Vitest 5 + React Testing Library + TanStack Query wrapped
-with ThemeProvider, I18nProvider, and SessionProvider.
+Implementation Specs: Vitest 5 + React Testing Library + TanStack Query.
 */
 
 import React from "react";
@@ -111,7 +110,7 @@ function renderDashboard() {
 }
 
 describe("US-01.2 Platform Core Executive Health Dashboard", () => {
-  it("renders KPIs, filters tenants by type/status, and shows alerts", async () => {
+  it("renders KPIs, filters tenants by type/status, and shows alerts & audits", async () => {
     const user = userEvent.setup();
     vi.stubGlobal(
       "fetch",
@@ -170,10 +169,7 @@ describe("US-01.2 Platform Core Executive Health Dashboard", () => {
                 status: 503,
                 detail: "Dashboard temporarily unavailable",
               }),
-              {
-                status: 503,
-                headers: { "Content-Type": "application/problem+json" },
-              }
+              { status: 503, headers: { "Content-Type": "application/problem+json" } }
             )
           );
         }

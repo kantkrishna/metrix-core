@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/contracts/problem-details.ts
+// frontend/src/contracts/problem-details.ts
 /*
 Purpose: Models RFC 9457 application/problem+json error payloads returned by
 Platform Core REST APIs.

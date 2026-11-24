@@ -1,4 +1,4 @@
-// metrix-core/frontend/postcss.config.mjs
+// frontend/postcss.config.mjs
 /*
 Purpose: Configures PostCSS with the official Tailwind CSS v4 plugin.
 

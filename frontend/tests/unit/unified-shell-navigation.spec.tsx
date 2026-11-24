@@ -1,4 +1,4 @@
-// metrix-core/frontend/tests/unit/unified-shell-navigation.spec.tsx
+// frontend/tests/unit/unified-shell-navigation.spec.tsx
 /*
 Purpose: Verifies US-01.3 acceptance criteria for collapsible/pinnable left
 navigation (default hidden, zero-shift overlay, Pin Up/Pin Down persistence,
@@ -61,33 +61,31 @@ function renderShell(initialPinned = false) {
     },
   };
 
-  const fetchMock = vi
-    .fn()
-    .mockImplementation((url: string, init?: RequestInit) => {
-      if (url.includes("/me/preferences") && init?.method === "PATCH") {
-        const body = JSON.parse(String(init.body ?? "{}"));
-        return Promise.resolve(
-          new Response(JSON.stringify({ ...manifest.uiPreferences, ...body }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        );
-      }
-      if (url.includes("/health/services")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ operationalCount: 4, totalCount: 4, services: [] }),
-            { status: 200, headers: { "Content-Type": "application/json" } }
-          )
-        );
-      }
+  const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    if (url.includes("/me/preferences") && init?.method === "PATCH") {
+      const body = JSON.parse(String(init.body ?? "{}"));
       return Promise.resolve(
-        new Response(JSON.stringify(manifest), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
+        new Response(
+          JSON.stringify({ ...manifest.uiPreferences, ...body }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
       );
-    });
+    }
+    if (url.includes("/health/services")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ operationalCount: 4, totalCount: 4, services: [] }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify(manifest), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+  });
 
   vi.stubGlobal("fetch", fetchMock);
   Object.defineProperty(window, "innerWidth", {
@@ -118,12 +116,12 @@ function renderShell(initialPinned = false) {
 }
 
 describe("US-01.3 Adaptive Left Navigation & Icon-Only Theme Switcher", () => {
-  it("opens floating overlay via Ctrl+B, pins with Pin Down & persists", async () => {
+  it("starts hidden, opens floating overlay via Ctrl+B, pins with Pin Down & persists", async () => {
     const user = userEvent.setup();
     const { fetchMock } = renderShell(false);
 
     await screen.findByText("Workspace Body");
-    expect(screen.queryByRole("dialog", { name: /navigation/i })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /platform core/i })).toBeNull();
 
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     expect(
@@ -151,7 +149,7 @@ describe("US-01.3 Adaptive Left Navigation & Icon-Only Theme Switcher", () => {
     vi.unstubAllGlobals();
   });
 
-  it("overrides pinned sidebar below 1024px without mutating preference", async () => {
+  it("overrides pinned sidebar to overlay below 1024px without overwriting preference", async () => {
     const { fetchMock } = renderShell(true);
 
     await waitFor(() => {
@@ -186,7 +184,7 @@ describe("US-01.3 Adaptive Left Navigation & Icon-Only Theme Switcher", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders icon-only theme button and switches to System OS dark", async () => {
+  it("renders icon-only theme button and switches to System mode syncing OS dark", async () => {
     const user = userEvent.setup();
     vi.stubGlobal(
       "matchMedia",

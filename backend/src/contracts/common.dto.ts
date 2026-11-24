@@ -1,4 +1,4 @@
-// src/contracts/common.dto.ts
+// backend/src/contracts/common.dto.ts
 //
 // Purpose: Defines reusable primitive, temporal, monetary, pagination, and RFC 9457 error Zod schemas.
 //

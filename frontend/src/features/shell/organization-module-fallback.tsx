@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/shell/organization-module-fallback.tsx
+// frontend/src/features/shell/organization-module-fallback.tsx
 /*
 Purpose: Renders the non-destructive graceful fallback banner and eligible
 organization list when a user switches to a module disabled on the currently

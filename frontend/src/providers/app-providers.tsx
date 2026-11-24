@@ -1,8 +1,7 @@
-// metrix-core/frontend/src/providers/app-providers.tsx
+// frontend/src/providers/app-providers.tsx
 /*
 Purpose: Composes top-level React providers (TanStack Query, Theme, I18N,
-Session, Radix Tooltip, and Sonner Toast) for the METRix Platform Core App
-Shell.
+Session, Radix Tooltip, and Sonner Toast) for the METRix Platform Core App Shell.
 
 Context: Isolates client-side state providers cleanly from Server Components in
 Next.js App Router while preventing cross-request query cache sharing.

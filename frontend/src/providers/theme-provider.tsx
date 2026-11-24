@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/providers/theme-provider.tsx
+// frontend/src/providers/theme-provider.tsx
 /*
 Purpose: Manages Light, Dark, and System appearance state aligned with OpenAPI
 UiThemeMode (LIGHT | DARK | SYSTEM) and @theme inline .dark class toggling.

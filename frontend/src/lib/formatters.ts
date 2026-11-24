@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/lib/formatters.ts
+// frontend/src/lib/formatters.ts
 /*
 Purpose: Provides locale-aware date/time formatters and precision-safe monetary
 formatting using Decimal.js.

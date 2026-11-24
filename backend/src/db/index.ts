@@ -1,4 +1,4 @@
-// src/db/index.ts
+// backend/src/db/index.ts
 //
 // Purpose: Initializes the pooled PostgreSQL Drizzle client and provides transaction-scoped RLS context execution.
 //

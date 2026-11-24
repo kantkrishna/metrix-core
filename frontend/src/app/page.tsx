@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/app/page.tsx
+// frontend/src/app/page.tsx
 /*
 Purpose: Root entry route redirecting authenticated users to /dashboard and
 unauthenticated users to /login without exposing protected tenant data.

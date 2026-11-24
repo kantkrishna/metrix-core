@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/contracts/enums.ts
+// frontend/src/contracts/enums.ts
 /*
 Purpose: Defines all 30 PostgreSQL-aligned enum constants and Zod v4 schemas
 matching openapi-platform-core-v1.yaml.

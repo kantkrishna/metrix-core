@@ -1,4 +1,4 @@
-// src/db/schema/index.ts
+// backend/src/db/schema/index.ts
 //
 // Purpose: Re-exports all Platform Core Drizzle tables, enums, and relation definitions from a single entrypoint.
 //

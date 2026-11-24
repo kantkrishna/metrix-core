@@ -1,4 +1,4 @@
-# metrix-core/frontend/.gitignore
+# frontend/.gitignore
 #
 # Purpose: Excludes build outputs, dependencies, coverage reports, Playwright
 # artifacts, and local secret files from version control.

@@ -1,13 +1,10 @@
-// metrix-core/frontend/src/app/workspaces/page.tsx
+// frontend/src/app/workspaces/page.tsx
 /*
-Purpose: Renders the /workspaces multi-tenant selector route after OIDC
-sign-in.
+Purpose: Renders the /workspaces multi-tenant selector route after OIDC sign-in.
 
-Context: Satisfies US-01.1 AC 4 and redirects unauthenticated visitors to
-/login.
+Context: Satisfies US-01.1 AC 4 and redirects unauthenticated visitors to /login.
 
-Implementation Specs: Hydrates workspaces from SessionContext or
-GET /auth/workspaces.
+Implementation Specs: Hydrates workspaces from SessionContext or GET /auth/workspaces.
 */
 
 "use client";

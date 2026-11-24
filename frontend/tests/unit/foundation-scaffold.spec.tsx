@@ -1,4 +1,4 @@
-// metrix-core/frontend/tests/unit/foundation-scaffold.spec.tsx
+// frontend/tests/unit/foundation-scaffold.spec.tsx
 /*
 Purpose: Verifies core scaffold guarantees prior to Epic 1 TDD implementation:
 RLS header injection, RFC 9457 ProblemDetails parsing, Decimal.js currency

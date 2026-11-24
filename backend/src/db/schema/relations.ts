@@ -1,4 +1,4 @@
-// src/db/schema/relations.ts
+// backend/src/db/schema/relations.ts
 //
 // Purpose: Declares Drizzle ORM relational associations across tenants, organizations, users, RBAC, and subscriptions.
 //

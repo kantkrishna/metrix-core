@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/auth/oidc-sign-in-view.tsx
+// frontend/src/features/auth/oidc-sign-in-view.tsx
 /*
 Purpose: Renders the delegated OIDC Sign-In screen allowing optional workspace
 slug or work email routing to an Enterprise SSO identity provider.

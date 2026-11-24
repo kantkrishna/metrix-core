@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/auth/workspace-picker-view.tsx
+// frontend/src/features/auth/workspace-picker-view.tsx
 /*
 Purpose: Renders the searchable multi-tenant Workspace Picker allowing users
 with access across multiple tenants to select their active workspace and

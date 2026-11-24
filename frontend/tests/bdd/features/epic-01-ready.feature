@@ -1,4 +1,4 @@
-# metrix-core/frontend/tests/bdd/features/epic-01-ready.feature
+# frontend/tests/bdd/features/epic-01-ready.feature
 #
 # Purpose: Verifies the Cucumber.js Gherkin BDD harness is wired and ready for
 # Epic 1 (EP-01) acceptance scenarios (US-01.1 through US-01.5).

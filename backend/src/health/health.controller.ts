@@ -1,4 +1,4 @@
-// src/health/health.controller.ts
+// backend/src/health/health.controller.ts
 //
 // Purpose: Exposes the public database connectivity and RLS posture health probe endpoint.
 //

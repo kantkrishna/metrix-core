@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/lib/api/http-client.ts
+// frontend/src/lib/api/http-client.ts
 /*
 Purpose: Provides the centralized, tenant-aware HTTP client for communicating
 with the METRix Platform Core REST API.

@@ -1,13 +1,13 @@
-// metrix-core/frontend/tests/setup.ts
+// frontend/tests/setup.ts
 /*
-Purpose: Initializes global test matchers, browser storage cleanup, and
-matchMedia polyfills for Vitest and React Testing Library.
+Purpose: Initializes global test matchers and browser API polyfills (matchMedia)
+for Vitest and React Testing Library.
 
-Context: Prevents localStorage/sessionStorage state leakage across Epic 1 auth,
-workspace, and theme test cases.
+Context: Ensures clean localStorage, sessionStorage, and DOM state between
+every test case.
 
-Implementation Specs: Clears localStorage, sessionStorage, and .dark class in
-afterEach and stubs window.matchMedia safely.
+Implementation Specs: Imports @testing-library/jest-dom/vitest and cleans up
+DOM and storage automatically after each test.
 */
 
 import "@testing-library/jest-dom/vitest";

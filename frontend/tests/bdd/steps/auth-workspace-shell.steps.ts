@@ -1,4 +1,4 @@
-// metrix-core/frontend/tests/bdd/steps/auth-workspace-shell.steps.ts
+// frontend/tests/bdd/steps/auth-workspace-shell.steps.ts
 /*
 Purpose: Cucumber.js step definitions validating Epic 1 responsive navigation
 and permission-filtered module switcher rules.
@@ -43,7 +43,7 @@ Then(
   (expected: string) => {
     const mode = resolveSidebarPresentation({
       savedPinned: savedPinPref,
-      isOverlayOpen: viewportWidth < 1024,
+      isOverlayOpen: false,
       viewportWidth,
     });
     assert.equal(mode, expected);

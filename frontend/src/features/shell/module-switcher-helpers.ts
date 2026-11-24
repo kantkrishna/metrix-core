@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/shell/module-switcher-helpers.ts
+// frontend/src/features/shell/module-switcher-helpers.ts
 /*
 Purpose: Pure permission-filtering and organization tree flattening helpers for
 the Unified Module Switcher and Graceful Organization Fallback views.

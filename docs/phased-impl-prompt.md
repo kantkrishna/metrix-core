@@ -39,7 +39,7 @@ Analyze `requirements.md` and the attached architecture/API references to fully 
     
    7.1. Use descriptive, context-driven directory and file names that clearly reflect functional purpose and scope. Avoid serial-number-based naming conventions (e.g., `epic_1`, `story_1_1`, `phase_1`).
    
-   7.2. Include the relative file path as the first line (e.g., `// metrix-core-frontend/src/features/shell/module-switcher.tsx`).
+   7.2. Include the relative file path as the first line (e.g., `// frontend/src/features/shell/module-switcher.tsx`).
    
    7.3. Include a concise header comment using appropriate syntax for the file type containing:
 
@@ -50,12 +50,12 @@ Analyze `requirements.md` and the attached architecture/API references to fully 
    Example 1 (Config / non-code file):
 
    ```
-   # metrix-core-frontend/.gitignore
+   # frontend/.gitignore
    #
    # Purpose: Excludes dependencies, Next.js build outputs, test coverage, and local environment
    # files from version control.
    #
-   # Context: Maintains clean repository hygiene for metrix-core-frontend/.
+   # Context: Maintains clean repository hygiene for frontend/.
    #
    # Implementation Specs: Covers Node.js, Next.js, Vitest, Playwright, Docker, and VS Code files.
    
@@ -64,7 +64,7 @@ Analyze `requirements.md` and the attached architecture/API references to fully 
    Example 2 (TypeScript / React file):
 
    ```
-   // metrix-core-frontend/src/features/shell/module-switcher.tsx
+   // frontend/src/features/shell/module-switcher.tsx
    /*
    Purpose: Renders the permission-driven Unified Module Switcher in the persistent Top Bar for
    switching between Platform Core and enabled downstream METRix modules.
@@ -81,7 +81,7 @@ Analyze `requirements.md` and the attached architecture/API references to fully 
    Example 3 (CSS / Theme file):
 
    ```
-   /* metrix-core-frontend/src/styles/tokens-core-theme.css
+   /* frontend/src/styles/tokens-core-theme.css
    
    Purpose: Defines Tailwind v4 @theme inline semantic color tokens for Light (:root) and Dark
    (.dark) modes across the Platform Core administration portal.

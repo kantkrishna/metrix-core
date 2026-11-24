@@ -1,4 +1,4 @@
-// metrix-core/frontend/tests/bdd/steps/scaffold-readiness.steps.ts
+// frontend/tests/bdd/steps/scaffold-readiness.steps.ts
 /*
 Purpose: Step definitions proving the Cucumber.js TypeScript BDD runner executes
 cleanly against src/ modules before Epic 1 acceptance tests are added.

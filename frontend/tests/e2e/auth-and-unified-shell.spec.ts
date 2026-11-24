@@ -1,4 +1,4 @@
-// metrix-core/frontend/tests/e2e/auth-and-unified-shell.spec.ts
+// frontend/tests/e2e/auth-and-unified-shell.spec.ts
 /*
 Purpose: Playwright E2E acceptance test validating delegated OIDC sign-in UI,
 zero password field compliance, and keyboard accessibility across desktop

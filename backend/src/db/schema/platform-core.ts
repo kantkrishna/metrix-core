@@ -1,4 +1,4 @@
-// src/db/schema/platform-core.ts
+// backend/src/db/schema/platform-core.ts
 //
 // Purpose: Defines the canonical PostgreSQL relational schema, enums, constraints, and indexes for the Platform Core Service.
 //

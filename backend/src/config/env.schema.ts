@@ -1,4 +1,4 @@
-// src/config/env.schema.ts
+// backend/src/config/env.schema.ts
 //
 // Purpose: Defines and validates all runtime environment variables required by the Platform Core microservice.
 //
@@ -37,6 +37,12 @@ export const envSchema = z.object({
 
   OTEL_SERVICE_NAME: z.string().min(1).default('metrix-platform-core-service'),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+
+  FRONTEND_ORIGIN: z.string().url().default("http://localhost:3000"),
+  OIDC_DEV_MOCK_ENABLED: z
+    .enum(["true", "false"])
+    .default("false"),
+
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

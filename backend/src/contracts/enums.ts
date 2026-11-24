@@ -1,4 +1,4 @@
-// src/contracts/enums.ts
+// backend/src/contracts/enums.ts
 //
 // Purpose: Exports Zod validation schemas mirroring all 30 PostgreSQL enums defined in the Platform Core database schema.
 //

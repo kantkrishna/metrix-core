@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/config/env.ts
+// frontend/src/config/env.ts
 /*
 Purpose: Validates and exports typed frontend environment configuration with safe
 defaults for local development and strict validation in production.

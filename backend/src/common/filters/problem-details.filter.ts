@@ -1,4 +1,4 @@
-// src/common/filters/problem-details.filter.ts
+// backend/src/common/filters/problem-details.filter.ts
 //
 // Purpose: Translates Zod validation errors, NestJS HTTP exceptions, and unhandled errors into RFC 9457 ProblemDetails JSON.
 //

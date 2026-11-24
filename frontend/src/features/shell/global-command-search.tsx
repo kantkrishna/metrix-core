@@ -1,12 +1,13 @@
-// metrix-core/frontend/src/features/shell/global-command-search.tsx
+// frontend/src/features/shell/global-command-search.tsx
 /*
 Purpose: Implements the Global Command Search palette (Cmd/Ctrl+K) querying
 GET /api/v1/core/search within the caller's backend RLS scope.
 
-Context: Satisfies FR-CORE-007 and WCAG 2.1 AA modal keyboard dismissal (Esc).
+Context: Satisfies FR-CORE-007 and WCAG 2.1 AA modal keyboard dismissal (Esc)
+without jsx-a11y/no-autofocus violations.
 
-Implementation Specs: TanStack Query enabled when query length >= 2; focuses
-search input via useRef to comply with jsx-a11y/no-autofocus.
+Implementation Specs: TanStack Query enabled when query length >= 2 with
+programmatic input focus via useRef.
 */
 
 "use client";
@@ -63,10 +64,7 @@ export function GlobalCommandSearch({
         className="w-full max-w-lg rounded-lg border border-border bg-overlay shadow-xl"
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-          <Search
-            className="h-4 w-4 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <Search className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <input
             ref={inputRef}
             type="search"

@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/app/login/page.tsx
+// frontend/src/app/login/page.tsx
 /*
 Purpose: Renders the /login route for delegated OIDC sign-in.
 

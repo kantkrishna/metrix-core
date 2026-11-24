@@ -1,4 +1,4 @@
-// src/health/health.module.ts
+// backend/src/health/health.module.ts
 //
 // Purpose: Encapsulates and registers the Platform Core health probe controller.
 //

@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/app/layout.tsx
+// frontend/src/app/layout.tsx
 /*
 Purpose: Root Next.js App Router layout configuring typography (Inter +
 JetBrains Mono), flicker-free theme hydration, accessibility skip link, and
@@ -37,17 +37,17 @@ export const metadata: Metadata = {
     "entitlements, audit logs, and unified App Shell for Advantax Tax METRix.",
 };
 
-const themeInitScript = `
-(function () {
-  try {
-    var pref = localStorage.getItem("${THEME_STORAGE_KEY}") || "SYSTEM";
-    var sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    var isDark = pref === "DARK" || (pref === "SYSTEM" && sysDark);
-    document.documentElement.classList.toggle("dark", isDark);
-    document.documentElement.dataset.themePreference = pref;
-  } catch (e) {}
-})();
-`;
+const themeInitScript = [
+  "(function () {",
+  "  try {",
+  `    var pref = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)}) || "SYSTEM";`,
+  '    var sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;',
+  '    var isDark = pref === "DARK" || (pref === "SYSTEM" && sysDark);',
+  '    document.documentElement.classList.toggle("dark", isDark);',
+  "    document.documentElement.dataset.themePreference = pref;",
+  "  } catch (e) {}",
+  "})();",
+].join("\n");
 
 export default function RootLayout({
   children,

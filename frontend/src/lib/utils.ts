@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/lib/utils.ts
+// frontend/src/lib/utils.ts
 /*
 Purpose: Provides class-name composition utility for shadcn/ui and Tailwind v4
 components.

@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/auth/session-context.tsx
+// frontend/src/features/auth/session-context.tsx
 /*
 Purpose: Maintains client-side OIDC session state, active tenant/organization
 RLS context headers, and workspace list across the Platform Core UI.

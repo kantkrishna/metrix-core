@@ -1,4 +1,4 @@
-// src/db/rls-context.service.ts
+// backend/src/db/rls-context.service.ts
 //
 // Purpose: Manages PostgreSQL connection pool lifecycle, scoped RLS transactions, and runtime role security verification.
 //

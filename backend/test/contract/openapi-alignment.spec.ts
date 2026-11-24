@@ -107,13 +107,24 @@ describe('Phase 3 Contract Verification — OpenAPI 3.1 & Drizzle Parity', () =>
     const violations: string[] = [];
     for (const rel of codeFiles) {
       const ext = extname(rel);
-      const prefix = ext === '.sql' ? '--' : ['.yaml', '.yml'].includes(ext) || rel === '.env.example' ? '#' : '//';
-      const head = readFileSync(join(root, rel), 'utf8').split(/\r?\n/).slice(0, 14).join('\n');
-      const expectedFirstLine = `${prefix} ${rel}`;
-      const hasFirstLine = head.startsWith(`${expectedFirstLine}\n`);
+      const prefix =
+        ext === '.sql'
+          ? '--'
+          : ['.yaml', '.yml'].includes(ext) || rel === '.env.example'
+            ? '#'
+            : '//';
+      const head = readFileSync(join(root, rel), 'utf8')
+        .split(/\r?\n/)
+        .slice(0, 20)
+        .join('\n');
+      const hasFirstLine =
+        head.startsWith(`${prefix} backend/${rel}\n`) ||
+        head.startsWith(`${prefix} ${rel}\n`);
       const hasPurpose = head.includes(`\n${prefix}\n${prefix} Purpose: `);
       const hasContext = head.includes(`\n${prefix}\n${prefix} Context: `);
-      const hasSpecs = head.includes(`\n${prefix}\n${prefix} Implementation Specs: `);
+      const hasSpecs = head.includes(
+        `\n${prefix}\n${prefix} Implementation Specs: `
+      );
       if (!hasFirstLine || !hasPurpose || !hasContext || !hasSpecs) {
         violations.push(rel);
       }

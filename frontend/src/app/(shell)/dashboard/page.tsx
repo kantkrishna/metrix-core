@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/app/(shell)/dashboard/page.tsx
+// frontend/src/app/(shell)/dashboard/page.tsx
 /*
 Purpose: Renders the /dashboard route inside the protected Unified App Shell.
 

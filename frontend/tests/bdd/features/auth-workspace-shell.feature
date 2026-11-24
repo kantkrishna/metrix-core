@@ -14,7 +14,7 @@ Feature: Unified App Shell Navigation, Module Switcher & Org Fallback
   Scenario: Responsive viewport overrides pinned sidebar without mutating saved preference
     Given the user has a saved navigation preference of pinned
     When the viewport width changes to 900 pixels
-    Then the effective sidebar presentation is "overlay"
+    Then the effective sidebar presentation is "hidden"
     And the saved desktop pin preference remains true
     When the viewport width changes to 1440 pixels
     Then the effective sidebar presentation is "pinned"

@@ -1,4 +1,4 @@
-// metrix-core/frontend/eslint.config.mjs
+// frontend/eslint.config.mjs
 /*
 Purpose: Defines native ESLint 10 flat configuration for Next.js 16, React 19,
 TypeScript, and Core Web Vitals across metrix-core/frontend.

@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/lib/api/platform-core-api.ts
+// frontend/src/lib/api/platform-core-api.ts
 /*
 Purpose: Exposes typed, UI-only REST client methods for Epic 1 Platform Core
 operations against openapi-platform-core-v1.yaml.

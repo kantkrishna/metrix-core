@@ -1,4 +1,4 @@
-// src/db/seed.ts
+// backend/src/db/seed.ts
 //
 // Purpose: Populates realistic SMB, Enterprise, and CA Firm reference data and validates live PostgreSQL RLS and audit immutability.
 //

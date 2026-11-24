@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/components/ui/badge.tsx
+// frontend/src/components/ui/badge.tsx
 /*
 Purpose: Provides the reusable StatusBadge primitive mapped to METRix Platform
 Core Light/Dark status tokens.

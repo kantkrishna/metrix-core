@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/shell/navigation-state.ts
+// frontend/src/features/shell/navigation-state.ts
 /*
 Purpose: Pure state transition helpers for collapsible/pinnable sidebar
 presentation and responsive <1024px breakpoint override.

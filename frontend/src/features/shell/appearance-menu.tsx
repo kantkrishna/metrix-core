@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/shell/appearance-menu.tsx
+// frontend/src/features/shell/appearance-menu.tsx
 /*
 Purpose: Renders the compact icon-only Light / Dark / System theme trigger and
 3-mode dropdown popover in the persistent Top Bar.

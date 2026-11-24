@@ -1,4 +1,4 @@
-// src/common/decorators/require-permission.decorator.ts
+// backend/src/common/decorators/require-permission.decorator.ts
 //
 // Purpose: Attaches required RBAC permission metadata to NestJS route handlers and controllers.
 //

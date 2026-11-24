@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/app/(shell)/modules/[moduleCode]/page.tsx
+// frontend/src/app/(shell)/modules/[moduleCode]/page.tsx
 /*
 Purpose: Renders the unified downstream module shell boundary or triggers the
 Graceful Organization-Level Module Fallback when a module is not enabled on the

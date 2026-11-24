@@ -1,8 +1,8 @@
-// metrix-core/frontend/tests/unit/module-switcher-fallback.spec.tsx
+// frontend/tests/unit/module-switcher-fallback.spec.tsx
 /*
-Purpose: Verifies US-01.4 (Permission-Driven Unified Module Switcher) and
-US-01.5 (Graceful Organization-Level Module Fallback) including Admin vs.
-non-admin gated add-on visibility and one-click org recovery.
+Purpose: Verifies US-01.4 (Permission-Driven Unified Module Switcher) and US-01.5
+(Graceful Organization-Level Module Fallback) including Admin vs. non-admin
+gated add-on visibility and one-click org recovery.
 
 Context: Enforces FR-CORE-008, FR-CORE-009, FR-CORE-010, BR-015, and BR-016.
 
@@ -73,7 +73,7 @@ const ADMIN_MANIFEST: AccessibleModulesManifestResponse = {
   evaluatedAt: "2026-11-24T06:30:00.000Z",
 };
 
-describe("US-01.4 Unified Module Switcher & US-01.5 Org Fallback", () => {
+describe("US-01.4 Unified Module Switcher & US-01.5 Org-Level Graceful Fallback", () => {
   it("shows locked add-ons for Tenant Admin and routes module switches", async () => {
     const user = userEvent.setup();
     const onSelectModule = vi.fn();
@@ -135,7 +135,7 @@ describe("US-01.4 Unified Module Switcher & US-01.5 Org Fallback", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders fallback banner with eligible orgs and hides admin CTA", async () => {
+  it("renders org fallback banner with eligible orgs and hides admin CTA for staff", async () => {
     const user = userEvent.setup();
     const onSwitchOrg = vi.fn();
 

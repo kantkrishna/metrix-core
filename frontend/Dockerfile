@@ -1,4 +1,4 @@
-# metrix-core/frontend/Dockerfile
+# frontend/Dockerfile
 #
 # Purpose: Builds a minimal, non-root production container image for the
 # METRix Platform Core Next.js frontend.

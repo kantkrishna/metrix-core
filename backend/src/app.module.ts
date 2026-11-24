@@ -1,16 +1,28 @@
-// src/app.module.ts
+// backend/src/app.module.ts
 //
-// Purpose: Assembles the root NestJS application module graph with validated configuration, database, and health modules.
+// Purpose: Root NestJS application module wiring environment configuration,
+// database health probes (with HealthController DI providers), and Epic 1
+// OIDC auth & App Shell modules.
 //
-// Context: Blocks startup immediately via validateEnv when required OIDC, PostgreSQL, or encryption environment variables are missing or invalid.
+// Context: Mounts all 11 Epic 1 Platform Core routes under the global
+// /api/v1/core prefix defined in src/main.ts while preserving HealthController
+// dependencies such as RlsContextService.
 //
-// Implementation Specs: NestJS @Module importing ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }), DatabaseModule, and HealthModule.
+// Implementation Specs: Registers ConfigModule, HealthController, its reflected
+// constructor providers (RlsContextService), and AuthShellModule.
 
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { validateEnv } from './config/env.schema';
-import { DatabaseModule } from './db/database.module';
-import { HealthModule } from './health/health.module';
+import "reflect-metadata";
+import { Module, type Provider } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { validateEnv } from "./config/env.schema";
+import { HealthController } from "./health/health.controller";
+import { AuthShellModule } from "./modules/auth-shell.module";
+
+const healthControllerProviders = (
+  (Reflect.getMetadata("design:paramtypes", HealthController) as
+    | Provider[]
+    | undefined) ?? []
+).filter(Boolean);
 
 @Module({
   imports: [
@@ -18,8 +30,9 @@ import { HealthModule } from './health/health.module';
       isGlobal: true,
       validate: validateEnv,
     }),
-    DatabaseModule,
-    HealthModule,
+    AuthShellModule,
   ],
+  controllers: [HealthController],
+  providers: [...healthControllerProviders],
 })
 export class AppModule {}

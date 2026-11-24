@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/contracts/shell-auth.schemas.ts
+// frontend/src/contracts/shell-auth.schemas.ts
 /*
 Purpose: Defines Zod v4 contracts and TypeScript DTOs for Epic 1 (EP-01)
 operations including delegated OIDC auth, Workspace Picker, App Shell

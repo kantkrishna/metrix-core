@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/dashboard/executive-dashboard-view.tsx
+// frontend/src/features/dashboard/executive-dashboard-view.tsx
 /*
 Purpose: Renders the role-scoped Platform Core Executive Health Dashboard
 including 4 KPI cards, filterable tenant activity table, governance alert feed,
@@ -214,18 +214,10 @@ export function ExecutiveDashboardView(): React.ReactElement {
               <table className="w-full text-start text-xs">
                 <thead>
                   <tr className="border-b border-table-border text-[11px] uppercase text-muted-foreground">
-                    <th className="py-2 text-start">
-                      {t("dashboard.colTenant")}
-                    </th>
-                    <th className="py-2 text-start">
-                      {t("dashboard.colType")}
-                    </th>
-                    <th className="py-2 text-start">
-                      {t("dashboard.colSeats")}
-                    </th>
-                    <th className="py-2 text-start">
-                      {t("dashboard.colStatus")}
-                    </th>
+                    <th className="py-2 text-start">{t("dashboard.colTenant")}</th>
+                    <th className="py-2 text-start">{t("dashboard.colType")}</th>
+                    <th className="py-2 text-start">{t("dashboard.colSeats")}</th>
+                    <th className="py-2 text-start">{t("dashboard.colStatus")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -307,18 +299,10 @@ export function ExecutiveDashboardView(): React.ReactElement {
             <table className="w-full text-start text-xs">
               <thead>
                 <tr className="border-b border-table-border text-[11px] uppercase text-muted-foreground">
-                  <th className="py-2 text-start">
-                    {t("dashboard.colAction")}
-                  </th>
-                  <th className="py-2 text-start">
-                    {t("dashboard.colActor")}
-                  </th>
-                  <th className="py-2 text-start">
-                    {t("dashboard.colService")}
-                  </th>
-                  <th className="py-2 text-start">
-                    {t("dashboard.colOutcome")}
-                  </th>
+                  <th className="py-2 text-start">{t("dashboard.colAction")}</th>
+                  <th className="py-2 text-start">{t("dashboard.colActor")}</th>
+                  <th className="py-2 text-start">{t("dashboard.colService")}</th>
+                  <th className="py-2 text-start">{t("dashboard.colOutcome")}</th>
                   <th className="py-2 text-start">
                     {t("dashboard.colTimestamp")}
                   </th>

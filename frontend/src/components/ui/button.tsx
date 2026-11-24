@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/components/ui/button.tsx
+// frontend/src/components/ui/button.tsx
 /*
 Purpose: Provides the reusable shadcn/ui Button primitive mapped to METRix
 Platform Core @theme inline tokens.

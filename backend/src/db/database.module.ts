@@ -1,4 +1,4 @@
-// src/db/database.module.ts
+// backend/src/db/database.module.ts
 //
 // Purpose: Registers and globally exports the RlsContextService database provider across all NestJS feature modules.
 //

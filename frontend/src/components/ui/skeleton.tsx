@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/components/ui/skeleton.tsx
+// frontend/src/components/ui/skeleton.tsx
 /*
 Purpose: Provides an accessible loading skeleton shimmer primitive for dashboard
 KPIs and data tables during asynchronous hydration.

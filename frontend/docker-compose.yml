@@ -1,4 +1,4 @@
-# metrix-core/frontend/docker-compose.yml
+# frontend/docker-compose.yml
 #
 # Purpose: Provides reproducible local container orchestration to build, start,
 # stop, and verify the METRix Platform Core frontend container.

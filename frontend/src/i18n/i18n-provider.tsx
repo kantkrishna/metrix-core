@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/i18n/i18n-provider.tsx
+// frontend/src/i18n/i18n-provider.tsx
 /*
 Purpose: Provides externalized BCP-47 message resolution and deterministic
 fallback to en-IN across the Platform Core React tree.

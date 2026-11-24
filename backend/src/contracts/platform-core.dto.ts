@@ -1,4 +1,4 @@
-// src/contracts/platform-core.dto.ts
+// backend/src/contracts/platform-core.dto.ts
 //
 // Purpose: Defines request validation and App Shell module manifest response DTOs across all Platform Core API journeys.
 //

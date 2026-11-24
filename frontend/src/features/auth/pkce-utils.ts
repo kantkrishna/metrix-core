@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/auth/pkce-utils.ts
+// frontend/src/features/auth/pkce-utils.ts
 /*
 Purpose: Generates and manages ephemeral OIDC PKCE state and code_verifier
 values in browser sessionStorage for delegated OAuth 2.0 flows.

@@ -1,4 +1,4 @@
-// metrix-core/frontend/vitest.config.mjs
+// frontend/vitest.config.mjs
 /*
 Purpose: Configures Vitest 5 (native ESM) for strict Red-Green-Refactor unit
 and component testing across metrix-core/frontend.

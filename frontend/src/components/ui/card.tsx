@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/components/ui/card.tsx
+// frontend/src/components/ui/card.tsx
 /*
 Purpose: Provides composable shadcn/ui Card surface primitives styled with
 METRix @theme inline tokens.

@@ -1,4 +1,4 @@
-// src/main.ts
+// backend/src/main.ts
 //
 // Purpose: Bootstraps the NestJS Platform Core HTTP server with security headers, CORS, validation, and global error handling.
 //
@@ -41,6 +41,18 @@ async function bootstrap() {
   );
 
   app.enableShutdownHooks();
+
+  app.enableCors({
+    origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:3000",
+    credentials: true,
+    allowedHeaders: [
+      "Authorization",
+      "Content-Type",
+      "X-Tenant-Id",
+      "X-Organization-Id",
+      "Accept-Language",
+    ],
+  });
 
   await app.listen(port);
   logger.log(`Platform Core Service listening on http://localhost:${port}/${apiPrefix}`);

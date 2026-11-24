@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/app/(shell)/layout.tsx
+// frontend/src/app/(shell)/layout.tsx
 /*
 Purpose: Protected Unified App Shell route group layout enforcing OIDC session
 presence and rendering the persistent Top Bar and Left Navigation rail.

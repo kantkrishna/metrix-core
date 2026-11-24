@@ -1,4 +1,4 @@
-// metrix-core/frontend/src/features/shell/unified-app-shell.tsx
+// frontend/src/features/shell/unified-app-shell.tsx
 /*
 Purpose: Provides the unified 56px Top Bar and collapsible/pinnable 260px Left
 Navigation shell with Pin Down / Pin Up icons, responsive <1024px override,
@@ -8,8 +8,8 @@ Context: Satisfies US-01.3, US-01.4, FR-CORE-004 through FR-CORE-009, BR-017,
 and WCAG 2.1 AA landmarks (<nav>, <aside>, role="dialog").
 
 Implementation Specs: Hydrates GET /api/v1/core/me/modules and
-GET /api/v1/core/health/services via TanStack Query and persists pin changes
-via PATCH /api/v1/core/me/preferences.
+GET /api/v1/core/health/services via TanStack Query and persists pin changes via
+PATCH /api/v1/core/me/preferences.
 */
 
 "use client";
