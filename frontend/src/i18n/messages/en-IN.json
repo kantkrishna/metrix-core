@@ -96,7 +96,9 @@
     "eligibleOrgsHeading": "Authorized Organizations with {moduleName} Enabled",
     "downstreamBoundaryBadge": "Downstream Module Shell Boundary",
     "downstreamSynced": "Context synced · Org: {orgName} · Theme: {theme} · Locale: {locale}",
-    "returnToCore": "Return to Platform Core"
+    "returnToCore": "Return to Platform Core",
+    "routeComingSoonTitle": "Section Scheduled for Upcoming Release",
+    "routeComingSoonDetail": "The route {path} is registered in the Unified App Shell and will be enabled when its corresponding Epic is implemented."
   },
   "dashboard": {
     "title": "Platform Core Overview",

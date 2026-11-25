@@ -458,7 +458,7 @@ GRANT SELECT ON core.v_effective_user_org_permissions TO metrix_app;
 -- ----------------------------------------------------------------------------
 
 -- 6.1 Schema
-COMMENT ON SCHEMA core IS 'Advantax Tax METRix Platform Core schema owning tenancy, OIDC links, RBAC, subscriptions, entitlements, config, audit logs, and notifications.';
+COMMENT ON SCHEMA core IS 'METRix Platform Core schema owning tenancy, OIDC links, RBAC, subscriptions, entitlements, config, audit logs, and notifications.';
 
 -- 6.2 Enum Types (30)
 COMMENT ON TYPE core.customer_type_enum IS 'Customer archetype classification: INDIVIDUAL_SMB, ENTERPRISE, or CA_FIRM.';

@@ -2,7 +2,7 @@
   "name": "@advantax-metrix/platform-core-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "Advantax Tax METRix Platform Core Service React Frontend",
+  "description": "METRix Platform Core Service React Frontend",
   "engines": {
     "node": ">=22.22.2"
   },

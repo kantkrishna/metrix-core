@@ -30,35 +30,14 @@ import {
   userSessions,
   users,
 } from "../../db/schema/platform-core";
-import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class AuthService {
-  public constructor(private readonly config: ConfigService) {}
-
-  private get defaultIssuer(): string {
-    return (
-      this.config.get<string>("OIDC_ISSUER_URL") ??
-      process.env.OIDC_ISSUER_URL ??
-      "https://id.metrix-erp.cloud/realms/platform-core"
-    );
-  }
-
-  private get frontendBase(): string {
-    return (
-      this.config.get<string>("FRONTEND_ORIGIN") ??
-      process.env.FRONTEND_ORIGIN ??
-      "http://localhost:3000"
-    );
-  }
-
-  private get isDevMockEnabled(): boolean {
-    const raw =
-      this.config.get<string>("OIDC_DEV_MOCK_ENABLED") ??
-      process.env.OIDC_DEV_MOCK_ENABLED ??
-      "false";
-    return String(raw).replace(/^["']|["']$/g, "").trim().toLowerCase() === "true";
-  }
+  private readonly defaultIssuer =
+    process.env.OIDC_ISSUER_URL ??
+    "https://id.metrix-erp.cloud/realms/platform-core";
+  private readonly frontendBase =
+    process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
 
   public async discoverOidc(input: { workspaceSlug?: string; email?: string }) {
     const slug = input.workspaceSlug?.trim().toLowerCase();
@@ -75,13 +54,24 @@ export class AuthService {
 
         if (slug) {
           const [tenant] = await tx
-            .select({ id: tenants.id, slug: tenants.slug })
+            .select({
+              id: tenants.id,
+              slug: tenants.slug,
+              status: tenants.status,
+              legalName: tenants.legalName,
+            })
             .from(tenants)
             .where(eq(tenants.slug, slug))
             .limit(1);
 
           if (!tenant) {
             throw new NotFoundException(`Workspace "${slug}" was not found.`);
+          }
+
+          if (tenant.status === "SUSPENDED") {
+            throw new ForbiddenException(
+              `Tenant workspace "${tenant.legalName}" is currently suspended. Contact your administrator.`
+            );
           }
 
           const [identity] = await tx
@@ -92,9 +82,18 @@ export class AuthService {
           if (identity) {
             providerType = identity.providerType;
           }
-        } else if (email) {
-          const [row] = await tx
-            .select({ providerType: userOidcIdentities.providerType })
+        }
+
+        if (email) {
+          const [userRow] = await tx
+            .select({
+              id: users.id,
+              email: users.email,
+              fullName: users.fullName,
+              status: users.status,
+              primaryTenantId: users.primaryTenantId,
+              providerType: userOidcIdentities.providerType,
+            })
             .from(users)
             .leftJoin(
               userOidcIdentities,
@@ -102,12 +101,34 @@ export class AuthService {
             )
             .where(eq(users.email, email))
             .limit(1);
-          if (row?.providerType) {
-            providerType = row.providerType;
+
+          if (userRow && userRow.status !== "ACTIVE") {
+            await tx.insert(auditLogs).values({
+              eventCode: `EVT-${Date.now()}`,
+              tenantId: userRow.primaryTenantId,
+              actorUserId: userRow.id,
+              actorNameSnapshot: userRow.fullName,
+              serviceSource: "platform_core",
+              actionCategory: "AUTH",
+              eventAction: "auth.session.denied",
+              targetResourceType: "user_session",
+              targetResourceId: userRow.id,
+              outcome: "DENIED",
+              httpStatusCode: 403,
+              retentionUntilOn: "2033-11-24",
+              createdBy: userRow.id,
+            });
+            throw new ForbiddenException(
+              `User account "${userRow.email}" is currently suspended. Contact your administrator.`
+            );
+          }
+
+          if (!slug && userRow?.providerType) {
+            providerType = userRow.providerType;
           }
         }
 
-        const useDevMock = this.isDevMockEnabled;
+        const useDevMock = process.env.OIDC_DEV_MOCK_ENABLED === "true";
         const authUrl = useDevMock
           ? new URL(`${this.frontendBase}/auth/callback`)
           : new URL(`${this.defaultIssuer.replace(/\/+$/, "")}/authorize`);

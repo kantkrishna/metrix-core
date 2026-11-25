@@ -98,6 +98,7 @@ export class PlatformCoreHttpClient {
     const response = await fetch(url, {
       method: options.method ?? "GET",
       headers,
+      cache: "no-store",
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: options.signal,
     });

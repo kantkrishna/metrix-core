@@ -1,4 +1,4 @@
-# Advantax Tax METRix — Platform Core Integration & Verification Guide (v1.1)
+# METRix — Platform Core Integration & Verification Guide (v1.1)
 
 ## 1. Prerequisites
 - **Node.js** `>= 20.11.0` and **npm** `>= 10.0.0`

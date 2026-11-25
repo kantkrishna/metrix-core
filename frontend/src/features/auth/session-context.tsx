@@ -4,11 +4,10 @@ Purpose: Maintains client-side OIDC session state, active tenant/organization
 RLS context headers, and workspace list across the Platform Core UI.
 
 Context: Supplies RequestContext (Bearer JWT, X-Tenant-Id, X-Organization-Id,
-Accept-Language) to API calls while keeping all authorization decisions on the
-NestJS backend.
+Accept-Language) while preventing SSR/client hydration mismatches.
 
-Implementation Specs: React context persisting non-sensitive active tenant/org
-context in sessionStorage and clearing state cleanly on logout.
+Implementation Specs: Uses referentially stable useSyncExternalStore snapshots
+backed by sessionStorage and exposes isHydrated for route guards.
 */
 
 "use client";
@@ -18,7 +17,7 @@ import React, {
   useCallback,
   useContext,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import type {
   OidcCallbackResponse,
@@ -28,6 +27,7 @@ import type {
 import { useTranslations } from "@/i18n/i18n-provider";
 import type { RequestContext } from "@/lib/api/http-client";
 import { coreApi } from "@/lib/api/platform-core-api";
+import { useQueryClient } from "@tanstack/react-query";
 import { useThemePreference } from "@/providers/theme-provider";
 
 const SESSION_STORAGE_KEY = "metrix.core.session.v1";
@@ -41,6 +41,7 @@ interface PersistedSession {
 }
 
 export interface SessionContextValue {
+  isHydrated: boolean;
   isAuthenticated: boolean;
   accessToken: string | null;
   user: UserUiPreferences | null;
@@ -55,24 +56,57 @@ export interface SessionContextValue {
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
+const sessionListeners = new Set<() => void>();
+let cachedRawSession: string | null = null;
+let cachedParsedSession: PersistedSession | null = null;
 
-function readInitialSession(): PersistedSession | null {
+function notifySessionListeners(): void {
+  for (const listener of sessionListeners) {
+    listener();
+  }
+}
+
+function subscribeSession(listener: () => void): () => void {
+  sessionListeners.add(listener);
+  return () => sessionListeners.delete(listener);
+}
+
+function emptySubscribe(): () => void {
+  return () => undefined;
+}
+
+function getSessionSnapshot(): PersistedSession | null {
   if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as PersistedSession) : null;
-  } catch {
+  const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+  if (raw === cachedRawSession) {
+    return cachedParsedSession;
+  }
+  cachedRawSession = raw;
+  if (!raw) {
+    cachedParsedSession = null;
     return null;
   }
+  try {
+    cachedParsedSession = JSON.parse(raw) as PersistedSession;
+  } catch {
+    cachedParsedSession = null;
+  }
+  return cachedParsedSession;
 }
 
 function writeSession(session: PersistedSession | null): void {
   if (typeof window === "undefined") return;
   if (!session) {
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    return;
+    cachedRawSession = null;
+    cachedParsedSession = null;
+  } else {
+    const raw = JSON.stringify(session);
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, raw);
+    cachedRawSession = raw;
+    cachedParsedSession = session;
   }
-  window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  notifySessionListeners();
 }
 
 export function SessionProvider({
@@ -82,9 +116,19 @@ export function SessionProvider({
 }): React.ReactElement {
   const { locale } = useTranslations();
   const { setPreference } = useThemePreference();
-  const [session, setSession] = useState<PersistedSession | null>(() =>
-    readInitialSession()
+
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
   );
+  const session = useSyncExternalStore(
+    subscribeSession,
+    getSessionSnapshot,
+    () => null
+  );
+
+  const queryClient = useQueryClient();
 
   const establishSession = useCallback(
     (payload: OidcCallbackResponse): string | null => {
@@ -97,15 +141,14 @@ export function SessionProvider({
       const activeTenantId =
         singleWorkspace?.tenantId ?? matchedRemembered?.tenantId ?? null;
 
-      const next: PersistedSession = {
+      queryClient.clear();
+      writeSession({
         accessToken: payload.accessToken,
         user: payload.user,
         workspaces: payload.workspaces,
         activeTenantId,
         activeOrganizationId: null,
-      };
-      setSession(next);
-      writeSession(next);
+      });
       setPreference(payload.user.uiThemeMode);
       return activeTenantId;
     },
@@ -113,27 +156,21 @@ export function SessionProvider({
   );
 
   const selectTenantWorkspace = useCallback((tenantId: string) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      const next: PersistedSession = {
-        ...prev,
-        activeTenantId: tenantId,
-        activeOrganizationId: null,
-      };
-      writeSession(next);
-      return next;
+    const current = getSessionSnapshot();
+    if (!current) return;
+    writeSession({
+      ...current,
+      activeTenantId: tenantId,
+      activeOrganizationId: null,
     });
   }, []);
 
   const selectOrganization = useCallback((organizationId: string | null) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      const next: PersistedSession = {
-        ...prev,
-        activeOrganizationId: organizationId,
-      };
-      writeSession(next);
-      return next;
+    const current = getSessionSnapshot();
+    if (!current) return;
+    writeSession({
+      ...current,
+      activeOrganizationId: organizationId,
     });
   }, []);
 
@@ -157,13 +194,14 @@ export function SessionProvider({
         endUrl = null;
       }
     }
-    setSession(null);
     writeSession(null);
+    queryClient.clear();
     return endUrl;
   }, [requestContext, session?.accessToken]);
 
   const value = useMemo<SessionContextValue>(
     () => ({
+      isHydrated,
       isAuthenticated: Boolean(session?.accessToken),
       accessToken: session?.accessToken ?? null,
       user: session?.user ?? null,
@@ -177,6 +215,7 @@ export function SessionProvider({
       signOut,
     }),
     [
+      isHydrated,
       session,
       requestContext,
       establishSession,

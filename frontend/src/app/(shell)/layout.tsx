@@ -1,13 +1,13 @@
 // frontend/src/app/(shell)/layout.tsx
 /*
 Purpose: Protected Unified App Shell route group layout enforcing OIDC session
-presence and rendering the persistent Top Bar and Left Navigation rail.
+presence after client hydration and rendering the persistent Top Bar and Left
+Navigation rail.
 
-Context: Enforces US-01.1 AC 1, US-01.3, and US-01.4 across Platform Core and
-downstream module boundary routes.
+Context: Enforces US-01.1 AC 1, US-01.3, and US-01.4 with zero SSR hydration
+mismatch.
 
-Implementation Specs: Redirects unauthenticated visitors to /login before
-mounting protected children.
+Implementation Specs: Waits for isHydrated before redirecting or rendering.
 */
 
 "use client";
@@ -24,23 +24,24 @@ export default function ProtectedShellLayout({
 }): React.ReactElement | null {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated } = useSession();
+  const { isHydrated, isAuthenticated } = useSession();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (isHydrated && !isAuthenticated) {
       router.replace("/login");
     }
-  }, [isAuthenticated, router]);
+  }, [isHydrated, isAuthenticated, router]);
 
-  if (!isAuthenticated) return null;
+  if (!isHydrated || !isAuthenticated) return null;
 
   const moduleMatch = pathname.match(/^\/modules\/([^/]+)/);
   const activeModuleCode = moduleMatch?.[1] ?? "platform_core";
+  const segment = pathname.split("/")[1] ?? "dashboard";
 
   return (
     <UnifiedAppShell
       activeModuleCode={activeModuleCode}
-      activeRouteId={pathname === "/dashboard" ? "dashboard" : ""}
+      activeRouteId={segment === "audit-logs" ? "audit" : segment}
       onNavigate={(href) => router.push(href)}
     >
       {children}

@@ -3,11 +3,11 @@
 Purpose: Manages Light, Dark, and System appearance state aligned with OpenAPI
 UiThemeMode (LIGHT | DARK | SYSTEM) and @theme inline .dark class toggling.
 
-Context: Satisfies FR-CORE-006, BR-017, and US-01.3 AC 6 for flicker-free
-theme persistence across sessions and modules.
+Context: Satisfies FR-CORE-006, BR-017, and US-01.3 AC 6 with zero SSR/client
+hydration mismatch in Next.js App Router.
 
-Implementation Specs: Synchronizes with window.matchMedia when set to SYSTEM
-and persists locally while exposing a hook for backend /me/preferences sync.
+Implementation Specs: Uses useSyncExternalStore for localStorage and matchMedia
+reads so SSR and initial hydration always render identical markup.
 */
 
 "use client";
@@ -18,7 +18,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import type { UiThemeMode } from "@/contracts/enums";
 
@@ -31,21 +31,45 @@ export interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+const themeListeners = new Set<() => void>();
 
-function readSystemDark(): boolean {
+function notifyThemeListeners(): void {
+  for (const listener of themeListeners) {
+    listener();
+  }
+}
+
+function subscribeTheme(listener: () => void): () => void {
+  themeListeners.add(listener);
+  if (typeof window === "undefined") {
+    return () => themeListeners.delete(listener);
+  }
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === THEME_STORAGE_KEY) {
+      listener();
+    }
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    themeListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function subscribeSystemDark(listener: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) {
+    return () => undefined;
+  }
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  media.addEventListener("change", listener);
+  return () => media.removeEventListener("change", listener);
+}
+
+function getSystemDarkSnapshot(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) {
     return false;
   }
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function readStoredPreference(fallback: UiThemeMode): UiThemeMode {
-  if (typeof window === "undefined") return fallback;
-  const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (raw === "LIGHT" || raw === "DARK" || raw === "SYSTEM") {
-    return raw;
-  }
-  return fallback;
 }
 
 export interface ThemeProviderProps {
@@ -57,20 +81,26 @@ export function ThemeProvider({
   children,
   defaultPreference = "SYSTEM",
 }: ThemeProviderProps): React.ReactElement {
-  const [preference, setPreferenceState] = useState<UiThemeMode>(() =>
-    readStoredPreference(defaultPreference)
-  );
-  const [systemDark, setSystemDark] = useState<boolean>(() => readSystemDark());
+  const getPreferenceSnapshot = useCallback((): UiThemeMode => {
+    if (typeof window === "undefined") return defaultPreference;
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (raw === "LIGHT" || raw === "DARK" || raw === "SYSTEM") {
+      return raw;
+    }
+    return defaultPreference;
+  }, [defaultPreference]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const listener = (event: MediaQueryListEvent) => {
-      setSystemDark(event.matches);
-    };
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
-  }, []);
+  const preference = useSyncExternalStore(
+    subscribeTheme,
+    getPreferenceSnapshot,
+    () => defaultPreference
+  );
+
+  const systemDark = useSyncExternalStore(
+    subscribeSystemDark,
+    getSystemDarkSnapshot,
+    () => false
+  );
 
   const resolvedTheme: "light" | "dark" =
     preference === "DARK" || (preference === "SYSTEM" && systemDark)
@@ -85,10 +115,10 @@ export function ThemeProvider({
   }, [preference, resolvedTheme]);
 
   const setPreference = useCallback((mode: UiThemeMode) => {
-    setPreferenceState(mode);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(THEME_STORAGE_KEY, mode);
     }
+    notifyThemeListeners();
   }, []);
 
   const value = useMemo<ThemeContextValue>(

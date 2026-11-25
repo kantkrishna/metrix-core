@@ -1,7 +1,7 @@
 {
   "name": "@advantax-metrix/platform-core-service",
   "version": "1.1.0",
-  "description": "Advantax Tax METRix — Platform Core Microservice (NestJS 12, Drizzle ORM, PostgreSQL FORCE RLS, OpenAPI 3.1 incl. GET /me/modules & Vitest 5)",
+  "description": "METRix — Platform Core Microservice (NestJS 12, Drizzle ORM, PostgreSQL FORCE RLS, OpenAPI 3.1 incl. GET /me/modules & Vitest 5)",
   "private": true,
   "engines": {
     "node": ">=20.11.0",

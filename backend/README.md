@@ -1,4 +1,4 @@
-# Advantax Tax METRix — Platform Core Service Foundation (v1.0)
+# METRix — Platform Core Service Foundation (v1.0)
 
 Production-ready **NestJS 12 + PostgreSQL 16 + Drizzle ORM + FORCE RLS + OpenAPI 3.1 + Vitest/Testcontainers** integration package covering all 10 Platform Core journeys.
 

@@ -232,7 +232,11 @@ export class AppShellController {
       .update(JSON.stringify(manifest.modules))
       .digest("hex")
       .slice(0, 16);
-    res.setHeader("Cache-Control", "private, max-age=60");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader(
+      "Vary",
+      "Origin, Authorization, X-Tenant-Id, X-Organization-Id, Accept-Language"
+    );
     res.setHeader("ETag", `"${etag}"`);
     return manifest;
   }

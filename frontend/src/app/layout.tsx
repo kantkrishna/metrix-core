@@ -1,18 +1,19 @@
 // frontend/src/app/layout.tsx
 /*
 Purpose: Root Next.js App Router layout configuring typography (Inter +
-JetBrains Mono), flicker-free theme hydration, accessibility skip link, and
-top-level client providers.
+JetBrains Mono), flicker-free theme hydration via next/script, accessibility
+skip link, and top-level client providers.
 
 Context: Enforces WCAG 2.1 AA landmark structure (NFR-A11Y-01) and BCP-47 lang
 attribute (en-IN baseline, NFR-I18N-02).
 
-Implementation Specs: Injects a minimal synchronous script to apply .dark prior
-to first paint when LIGHT/DARK/SYSTEM resolves to dark.
+Implementation Specs: Uses next/script strategy="beforeInteractive" to apply
+.dark prior to first paint without React 19 raw <script> warnings.
 */
 
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import { publicEnv } from "@/config/env";
 import { AppProviders } from "@/providers/app-providers";
 import { THEME_STORAGE_KEY } from "@/providers/theme-provider";
@@ -34,7 +35,7 @@ export const metadata: Metadata = {
   title: publicEnv.NEXT_PUBLIC_APP_NAME,
   description:
     "Centralized multi-tenant administration, RBAC, subscriptions, " +
-    "entitlements, audit logs, and unified App Shell for Advantax Tax METRix.",
+    "entitlements, audit logs, and unified App Shell for METRix.",
 };
 
 const themeInitScript = [
@@ -60,10 +61,10 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body className="min-h-screen bg-background-1 font-sans text-foreground">
+        <Script id="metrix-theme-init" strategy="beforeInteractive">
+          {themeInitScript}
+        </Script>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-primary-foreground"

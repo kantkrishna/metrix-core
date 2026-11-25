@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
   else console.log(`  ✓ ${msg}`);
 };
 
-console.log('Validating Advantax Tax METRix Platform Core Contract & Schema Parity...\n');
+console.log('Validating METRix Platform Core Contract & Schema Parity...\n');
 
 assert(/^openapi:\s*3\.1\.0/m.test(yamlText), 'OpenAPI version is 3.1.0');
 assert(yamlText.includes('/api/v1/core'), 'Versioned base path /api/v1/core declared');

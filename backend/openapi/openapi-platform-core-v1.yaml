@@ -8,19 +8,19 @@
 
 openapi: 3.1.0
 info:
-  title: Advantax Tax METRix — Platform Core Service API
+  title: METRix — Platform Core Service API
   version: 1.1.0
   summary: Multi-tenant SaaS ERP administration, App Shell module manifest, RBAC, subscriptions, entitlements, audit orchestration & notifications.
   description: |
-    Authoritative OpenAPI 3.1.0 contract for the **Advantax Tax METRix Platform Core Service** (64 paths, 75 operations, 30 PostgreSQL-aligned enums).
+    Authoritative OpenAPI 3.1.0 contract for the **METRix Platform Core Service** (64 paths, 75 operations, 30 PostgreSQL-aligned enums).
     Includes `GET /api/v1/core/me/modules` for dynamic App Shell module switching and route rendering.
     Enforces delegated OIDC authentication, database-level PostgreSQL FORCE RLS via `X-Tenant-Id` / `X-Organization-Id`,
     exact Decimal.js `NUMERIC(14,2)` amounts, and RFC 9457 `application/problem+json` errors.
   contact:
-    name: Advantax Tax METRix Platform Architecture Team
+    name: METRix Platform Architecture Team
     email: architecture@advantax-metrix.io
   license:
-    name: Proprietary — Advantax Tax METRix
+    name: Proprietary — METRix
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 servers:
   - url: https://api.metrix-erp.cloud/api/v1/core

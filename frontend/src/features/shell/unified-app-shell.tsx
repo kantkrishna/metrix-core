@@ -5,16 +5,22 @@ Navigation shell with Pin Down / Pin Up icons, responsive <1024px override,
 Unified Module Switcher, Global Command Search, and Appearance Menu.
 
 Context: Satisfies US-01.3, US-01.4, FR-CORE-004 through FR-CORE-009, BR-017,
-and WCAG 2.1 AA landmarks (<nav>, <aside>, role="dialog").
+and WCAG 2.1 AA landmarks (<nav>, <aside>, role="dialog") with hydration-safe
+viewport width tracking.
 
 Implementation Specs: Hydrates GET /api/v1/core/me/modules and
-GET /api/v1/core/health/services via TanStack Query and persists pin changes via
-PATCH /api/v1/core/me/preferences.
+GET /api/v1/core/health/services via TanStack Query and uses
+useSyncExternalStore for window.innerWidth.
 */
 
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
@@ -127,6 +133,16 @@ const CORE_NAV_GROUPS: Array<{ groupKey: string; items: NavItemDef[] }> = [
   },
 ];
 
+function subscribeViewportResize(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener("resize", listener);
+  return () => window.removeEventListener("resize", listener);
+}
+
+function getViewportWidthSnapshot(): number {
+  return typeof window !== "undefined" ? window.innerWidth : 1440;
+}
+
 export interface UnifiedAppShellProps {
   children: React.ReactNode;
   activeModuleCode?: string;
@@ -148,8 +164,10 @@ export function UnifiedAppShell({
   >(null);
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [viewportWidth, setViewportWidth] = useState<number>(() =>
-    typeof window !== "undefined" ? window.innerWidth : 1440
+  const viewportWidth = useSyncExternalStore(
+    subscribeViewportResize,
+    getViewportWidthSnapshot,
+    () => 1440
   );
 
   const manifestQuery = useQuery({
@@ -197,12 +215,6 @@ export function UnifiedAppShell({
       .updateUiPreferences({ uiNavPinned: nextPinned }, requestContext)
       .catch(() => undefined);
   }, [requestContext, savedPinned]);
-
-  useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

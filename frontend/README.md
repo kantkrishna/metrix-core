@@ -1,6 +1,6 @@
 # METRix Platform Core Service — React Frontend (`metrix-core/frontend`)
 
-Production Next.js 16 / React 19 / TypeScript / Tailwind CSS v4 (`@theme inline`) / Zod v4 / `shadcn/ui` frontend scaffold for the **Advantax Tax METRix Platform Core Service**, ready for strict TDD implementation of **Epic 1 (`EP-01`)**.
+Production Next.js 16 / React 19 / TypeScript / Tailwind CSS v4 (`@theme inline`) / Zod v4 / `shadcn/ui` frontend scaffold for the **METRix Platform Core Service**, ready for strict TDD implementation of **Epic 1 (`EP-01`)**.
 
 ## Architecture & Source Alignment
 - **Requirements & Backlog:** `requirements.md` (`EP-01` – `EP-10`, `FR-CORE-001` – `FR-CORE-040`, `BR-001` – `BR-023`)

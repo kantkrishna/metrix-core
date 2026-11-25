@@ -30,7 +30,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
-/** Dedicated PostgreSQL schema owned exclusively by the Advantax Tax METRix Platform Core Service. */
+/** Dedicated PostgreSQL schema owned exclusively by the METRix Platform Core Service. */
 export const coreSchema = pgSchema('core');
 
 const auditColumns = () => ({

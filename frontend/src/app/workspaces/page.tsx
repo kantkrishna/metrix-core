@@ -2,9 +2,10 @@
 /*
 Purpose: Renders the /workspaces multi-tenant selector route after OIDC sign-in.
 
-Context: Satisfies US-01.1 AC 4 and redirects unauthenticated visitors to /login.
+Context: Satisfies US-01.1 AC 4 with hydration-safe session verification.
 
-Implementation Specs: Hydrates workspaces from SessionContext or GET /auth/workspaces.
+Implementation Specs: Hydrates workspaces from SessionContext or GET
+/auth/workspaces only after isHydrated is true.
 */
 
 "use client";
@@ -18,21 +19,22 @@ import { coreApi } from "@/lib/api/platform-core-api";
 
 export default function WorkspacesPage(): React.ReactElement | null {
   const router = useRouter();
-  const { isAuthenticated, workspaces, requestContext } = useSession();
+  const { isHydrated, isAuthenticated, workspaces, requestContext } =
+    useSession();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (isHydrated && !isAuthenticated) {
       router.replace("/login");
     }
-  }, [isAuthenticated, router]);
+  }, [isHydrated, isAuthenticated, router]);
 
   const query = useQuery({
     queryKey: ["auth-workspaces"],
     queryFn: () => coreApi.listWorkspaces(requestContext),
-    enabled: isAuthenticated && workspaces.length === 0,
+    enabled: isHydrated && isAuthenticated && workspaces.length === 0,
   });
 
-  if (!isAuthenticated) return null;
+  if (!isHydrated || !isAuthenticated) return null;
 
   const list = workspaces.length > 0 ? workspaces : (query.data?.items ?? []);
   return (

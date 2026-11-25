@@ -88,7 +88,7 @@ export async function runSeed(
           .values([
             {
               code: 'platform_core',
-              displayName: 'Platform Core Service',
+              displayName: 'Platform Core',
               description: 'Tenancy, OIDC identity links, RBAC, subscriptions, config, audit, and notifications.',
               apiVersion: 'v1.4',
               healthStatus: 'OPERATIONAL',
@@ -110,7 +110,7 @@ export async function runSeed(
             },
             {
               code: 'payroll_hrms',
-              displayName: 'Payroll & HRMS Service',
+              displayName: 'Payroll & HRMS',
               description: 'Employee lifecycle, salary structures, payroll processing, and statutory compliance.',
               apiVersion: 'v1.1',
               healthStatus: 'OPERATIONAL',
@@ -881,7 +881,7 @@ export async function runSeed(
               scopeTenantId: null,
               category: 'GENERAL_LOCALIZATION',
               configKey: 'platform.localization',
-              configValue: { displayName: 'Advantax Tax METRix', timezone: 'Asia/Kolkata', currency: 'INR', fyStartMonth: 4 },
+              configValue: { displayName: 'METRix', timezone: 'Asia/Kolkata', currency: 'INR', fyStartMonth: 4 },
               requiresImpactConfirmation: false,
               createdBy: IDS.superAdmin,
               updatedBy: IDS.superAdmin,
