@@ -1,10 +1,13 @@
-// backend/src/main.ts
+// src/main.ts
 //
-// Purpose: Bootstraps the NestJS Platform Core HTTP server with security headers, CORS, validation, and global error handling.
+// Purpose: Bootstraps the NestJS Platform Core HTTP server with Helmet security headers,
+// CORS, strict ValidationPipe, global /api/v1/core prefix, and graceful shutdown hooks.
 //
-// Context: Enforces the versioned /api/v1/core prefix, allowed RLS context headers, and RFC 9457 error formatting on every endpoint.
+// Context: Binds explicitly to 0.0.0.0 so the service is reachable across Docker bridge networks
+// on Windows, macOS, and Linux container runtimes.
 //
-// Implementation Specs: NestJS 12 NestFactory entrypoint configuring helmet, CORS, ValidationPipe, ProblemDetailsFilter, and graceful shutdown hooks.
+// Implementation Specs: NestJS 12 Express adapter listening on PORT (default 4001) with
+// RFC 9457 ProblemDetailsFilter compatibility and X-Tenant-Id / X-Organization-Id CORS headers.
 
 import 'reflect-metadata';
 import { Logger, ValidationPipe } from '@nestjs/common';
@@ -12,7 +15,6 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { ProblemDetailsFilter } from './common/filters/problem-details.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -27,11 +29,17 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigin.split(',').map((o) => o.trim()),
     credentials: true,
-    allowedHeaders: ['Authorization', 'Content-Type', 'X-Tenant-Id', 'X-Organization-Id', 'X-Trace-Id', 'X-API-Key'],
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'X-API-Key',
+      'X-Tenant-Id',
+      'X-Organization-Id',
+      'X-Trace-Id',
+    ],
   });
 
   app.setGlobalPrefix(apiPrefix);
-  app.useGlobalFilters(new ProblemDetailsFilter());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -42,20 +50,8 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  app.enableCors({
-    origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:3000",
-    credentials: true,
-    allowedHeaders: [
-      "Authorization",
-      "Content-Type",
-      "X-Tenant-Id",
-      "X-Organization-Id",
-      "Accept-Language",
-    ],
-  });
-
-  await app.listen(port);
-  logger.log(`Platform Core Service listening on http://localhost:${port}/${apiPrefix}`);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`Platform Core Service listening on http://0.0.0.0:${port}/${apiPrefix}`);
 }
 
 bootstrap().catch((err) => {

@@ -1,0 +1,23 @@
+# docker-compose.dev.yml
+#
+# Purpose: Docker Compose override enabling live source-code hot-reloading (nest start --watch)
+# for the Platform Core API container during active local development.
+#
+# Context: Layered on top of docker-compose.yml via:
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Implementation Specs: Switches api build target to "dev", sets NODE_ENV=development, and
+# bind-mounts ./src and ./openapi while preserving Linux container node_modules.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./src:/app/src:ro
+      - ./openapi:/app/openapi:ro
+    command: ["npm", "run", "start:dev"]

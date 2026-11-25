@@ -1,0 +1,32 @@
+# .dockerignore
+#
+# Purpose: Excludes host dependencies, build artifacts, secrets, Git metadata, and test outputs
+# from the Docker build context sent to the daemon.
+#
+# Context: Prevents Windows/macOS native node_modules binaries (e.g., esbuild) and local .env
+# files from leaking into Linux Alpine container layers.
+#
+# Implementation Specs: Retains scripts/shims/node-abort-controller (required by package.json overrides)
+# while ignoring node_modules, dist, coverage, .env, .git, and IDE folders.
+
+node_modules
+dist
+coverage
+.vitest
+.git
+.gitignore
+.github
+.vscode
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+*.tsbuildinfo
+*.zip
+test
+docs
+README.md
+PHASE*-README.md
+DOCKER-README.md
+LICENSE

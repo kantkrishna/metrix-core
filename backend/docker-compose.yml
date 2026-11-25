@@ -1,10 +1,15 @@
 # docker-compose.yml
 #
-# Purpose: Orchestrates local PostgreSQL 16 and Redis 7 containers for Platform Core development and manual verification.
+# Purpose: Orchestrates the complete local Docker stack for Advantax Tax METRix Platform Core:
+# PostgreSQL 16, Redis 7, optional one-shot db-bootstrap migrator/seeder, and the NestJS API service.
 #
-# Context: Mounts docker/postgres-init to auto-provision metrix_owner and metrix_app (NOBYPASSRLS) roles before first schema push.
+# Context: Enforces dual-role PostgreSQL security by restricting DATABASE_ADMIN_URL (metrix_owner)
+# strictly to the profile-gated db-bootstrap container while running the persistent api container
+# solely under metrix_app (NOSUPERUSER NOBYPASSRLS).
 #
-# Implementation Specs: Docker Compose services for postgres:16-alpine (port 5432) and redis:7-alpine (port 6379) with named volumes and healthchecks.
+# Implementation Specs: Docker Compose v2 using profiles: ["bootstrap"] + required: false on
+# api.depends_on.db-bootstrap so "docker compose up -d" skips db-bootstrap while
+# "docker compose --profile bootstrap up -d" waits for db-bootstrap to complete before starting api.
 
 services:
   postgres:
@@ -13,7 +18,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_dev_root_pwd
+      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD:-postgres_dev_root_pwd}
       POSTGRES_DB: metrix_platform_core
     ports:
       - "5432:5432"
@@ -24,7 +29,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U postgres -d metrix_platform_core"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
 
   redis:
     image: redis:7-alpine
@@ -39,7 +44,64 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+
+  db-bootstrap:
+    profiles: ["bootstrap"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    container_name: metrix-platform-core-db-bootstrap
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_ADMIN_URL: postgresql://metrix_owner:${METRIX_OWNER_PASSWORD:-metrix_owner_dev_pwd}@postgres:5432/metrix_platform_core
+      DATABASE_URL: postgresql://metrix_app:${METRIX_APP_PASSWORD:-metrix_app_dev_pwd}@postgres:5432/metrix_platform_core
+      DATABASE_SSL: "false"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: metrix-platform-core-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
+        required: false
+    ports:
+      - "${PORT:-4001}:4001"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4001
+      API_PREFIX: ${API_PREFIX:-api/v1/core}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      # TODO: Configuration for Dev testing with OIDC mock server. Remove for Production deployment.
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      OIDC_DEV_MOCK_ENABLED: ${OIDC_DEV_MOCK_ENABLED:-true}
+      # Security: api receives ONLY metrix_app (NOSUPERUSER NOBYPASSRLS) — never DATABASE_ADMIN_URL
+      DATABASE_URL: postgresql://metrix_app:${METRIX_APP_PASSWORD:-metrix_app_dev_pwd}@postgres:5432/metrix_platform_core
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+      DATABASE_SSL: "false"
+      REDIS_URL: redis://redis:6379/0
+      BULLMQ_PREFIX: ${BULLMQ_PREFIX:-metrix:core}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-https://id.metrix-erp.cloud/realms/platform-core}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-metrix-platform-core-web}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-replace_with_oidc_client_secret}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-https://id.metrix-erp.cloud/realms/platform-core/protocol/openid-connect/certs}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:3000/auth/callback}
+      KMS_ENVELOPE_KEY_HEX: ${KMS_ENVELOPE_KEY_HEX:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-metrix-platform-core-service}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4318}
 
 volumes:
   metrix_core_pgdata:
