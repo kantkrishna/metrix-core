@@ -1,0 +1,12 @@
+# ==============================================================================
+# METRix Core — Unified Root Docker Compose Entry Point (Phase 2)
+# Composes backend/ and frontend/ stacks via native Docker Compose `include:`
+# without modifying either subproject's Compose file or Dockerfile.
+# Requires Docker Compose v2.20+.
+# ==============================================================================
+
+name: metrix-core
+
+include:
+  - backend/docker-compose.yml
+  - frontend/docker-compose.yml
