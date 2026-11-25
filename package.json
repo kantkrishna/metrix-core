@@ -1,0 +1,53 @@
+{
+  "name": "metrix-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "METRix Platform Core unified root task orchestrator (lightweight polyrepo)",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "install:backend": "npm --prefix backend install",
+    "install:frontend": "npm --prefix frontend install",
+    "install:all": "npm install && npm run install:backend && npm run install:frontend",
+    "ci:backend": "npm --prefix backend ci",
+    "ci:frontend": "npm --prefix frontend ci",
+    "ci:all": "npm ci && npm run ci:backend && npm run ci:frontend",
+    "dev:backend": "npm --prefix backend run start:dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "concurrently --names \"backend,frontend\" --prefix-colors \"cyan,magenta\" --kill-others-on-fail \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start:backend": "npm --prefix backend run start:prod",
+    "start:frontend": "npm --prefix frontend run start",
+    "start": "concurrently --names \"backend,frontend\" --prefix-colors \"cyan,magenta\" --kill-others-on-fail \"npm run start:backend\" \"npm run start:frontend\"",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "typecheck:backend": "npm --prefix backend run typecheck",
+    "typecheck:frontend": "npm --prefix frontend run typecheck",
+    "typecheck": "npm run typecheck:backend && npm run typecheck:frontend",
+    "openapi:validate": "npm --prefix backend run openapi:validate",
+    "test:backend": "npm --prefix backend run test:unit",
+    "test:backend:integration": "npm --prefix backend run test:integration",
+    "test:frontend": "npm --prefix frontend run test:unit",
+    "test:frontend:coverage": "npm --prefix frontend run test:coverage",
+    "test:bdd": "npm --prefix frontend run test:bdd",
+    "test:e2e": "npm --prefix frontend run test:e2e",
+    "test": "npm run test:backend && npm run test:frontend",
+    "verify:backend": "npm --prefix backend run verify:all",
+    "verify:frontend": "npm --prefix frontend run verify:all",
+    "verify:all": "npm run verify:backend && npm run verify:frontend && npm run test:bdd",
+    "infra:up": "docker compose -f backend/docker-compose.yml up -d postgres redis",
+    "infra:down": "npm --prefix backend run docker:down",
+    "db:generate": "npm --prefix backend run db:generate",
+    "db:push": "npm --prefix backend run db:push",
+    "db:migrate:rls": "npm --prefix backend run db:migrate:rls",
+    "db:seed": "npm --prefix backend run db:seed",
+    "db:bootstrap": "npm --prefix backend run db:bootstrap",
+    "db:studio": "npm --prefix backend run db:studio"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
