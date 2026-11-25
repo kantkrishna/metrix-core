@@ -1,10 +1,14 @@
 // backend/src/db/schema/platform-core.ts
 //
-// Purpose: Defines the canonical PostgreSQL relational schema, enums, constraints, and indexes for the Platform Core Service.
+// Purpose: Defines the complete 24-table, 30-enum PostgreSQL Drizzle ORM schema for the
+// Advantax Tax METRix Platform Core Service inside the dedicated "core" schema.
 //
-// Context: Enforces NOT NULL audit actors, TIMESTAMPTZ/DATE precision, NUMERIC(14,2) monetary safety, and composite same-tenant foreign keys.
+// Context: Enforces multi-tenant isolation keys, composite same-tenant foreign keys,
+// NOT NULL created_by/updated_by audit fields, NUMERIC(14,2) financial precision, and a
+// PostgreSQL GENERATED ALWAYS AS (...) STORED full_name column derived from given_name and family_name.
 //
-// Implementation Specs: Drizzle ORM (pgSchema("core")) with 24 tables, 30 enums, paired partial unique indexes, and CHECK constraints.
+// Implementation Specs: Drizzle ORM 0.45.x pgSchema('core') definitions using TIMESTAMPTZ,
+// DATE, TIME, paired partial unique indexes, CHECK constraints, and immutable generated SQL.
 
 import {
   pgSchema,
@@ -28,10 +32,14 @@ import {
   check,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 
-/** Dedicated PostgreSQL schema owned exclusively by the METRix Platform Core Service. */
+/** Dedicated PostgreSQL schema owned exclusively by the Advantax Tax METRix Platform Core Service. */
 export const coreSchema = pgSchema('core');
+
+// ============================================================================
+// 1. REUSABLE AUDIT COLUMN HELPERS
+// ============================================================================
 
 const auditColumns = () => ({
   createdBy: uuid('created_by').notNull(),
@@ -40,7 +48,10 @@ const auditColumns = () => ({
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
-// 30 PostgreSQL Enums (1:1 parity with Zod & OpenAPI 3.1)
+// ============================================================================
+// 2. POSTGRESQL ENUMS (30 Enums aligned 1:1 with Zod DTOs & OpenAPI 3.1)
+// ============================================================================
+
 export const customerTypeEnum = coreSchema.enum('customer_type_enum', ['INDIVIDUAL_SMB', 'ENTERPRISE', 'CA_FIRM']);
 export const tenantStatusEnum = coreSchema.enum('tenant_status_enum', ['TRIAL', 'ACTIVE', 'SUSPENDED', 'ARCHIVED']);
 export const orgTypeEnum = coreSchema.enum('org_type_enum', ['PRIMARY_BUSINESS', 'CORPORATE_HQ', 'SUBSIDIARY', 'BRANCH', 'CA_PRACTICE_HQ', 'CA_CLIENT_ORG']);
@@ -72,7 +83,10 @@ export const emailRoutingModeEnum = coreSchema.enum('email_routing_mode_enum', [
 export const deliveryCadenceEnum = coreSchema.enum('delivery_cadence_enum', ['REAL_TIME', 'DAILY_DIGEST']);
 export const deliveryStatusEnum = coreSchema.enum('delivery_status_enum', ['QUEUED', 'DELIVERED', 'BOUNCED', 'RETRYING', 'FAILED']);
 
-// 24 Tables inside schema "core"
+// ============================================================================
+// 3. TENANCY & ORGANIZATION HIERARCHY (Journeys 1 & 2)
+// ============================================================================
+
 export const tenants = coreSchema.table(
   'tenants',
   {
@@ -97,15 +111,19 @@ export const tenants = coreSchema.table(
     index('idx_tenants_type_status').on(t.customerType, t.status),
     check('chk_tenants_fy_month', sql`${t.fyStartMonth} BETWEEN 1 AND 12`),
     check('chk_tenants_slug_format', sql`${t.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`),
-  ]
+  ],
 );
 
 export const organizations = coreSchema.table(
   'organizations',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-    parentOrgId: uuid('parent_org_id').references((): AnyPgColumn => organizations.id, { onDelete: 'set null' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    parentOrgId: uuid('parent_org_id').references((): AnyPgColumn => organizations.id, {
+      onDelete: 'set null',
+    }),
     orgCode: varchar('org_code', { length: 24 }).notNull(),
     legalName: varchar('legal_name', { length: 200 }).notNull(),
     orgType: orgTypeEnum('org_type').notNull(),
@@ -118,16 +136,29 @@ export const organizations = coreSchema.table(
     unique('uq_orgs_tenant_id_id').on(t.tenantId, t.id),
     index('idx_orgs_tenant_parent').on(t.tenantId, t.parentOrgId),
     index('idx_orgs_tenant_type_status').on(t.tenantId, t.orgType, t.status),
-  ]
+  ],
 );
+
+// ============================================================================
+// 4. USERS, MANAGED OIDC IDENTITIES, INVITATIONS & SESSIONS (Journeys 1 & 3)
+// ============================================================================
 
 export const users = coreSchema.table(
   'users',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    primaryTenantId: uuid('primary_tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    primaryTenantId: uuid('primary_tenant_id').references(() => tenants.id, {
+      onDelete: 'set null',
+    }),
     email: varchar('email', { length: 255 }).notNull(),
-    fullName: varchar('full_name', { length: 160 }).notNull(),
+    givenName: varchar('given_name', { length: 80 }).notNull(),
+    familyName: varchar('family_name', { length: 80 }),
+    fullName: varchar('full_name', { length: 161 })
+      .generatedAlwaysAs(
+        (): SQL =>
+          sql`btrim(CASE WHEN family_name IS NULL OR btrim(family_name) = '' THEN btrim(given_name) ELSE btrim(given_name) || ' ' || btrim(family_name) END)`,
+      )
+      .notNull(),
     phone: varchar('phone', { length: 32 }),
     isPlatformSuperAdmin: boolean('is_platform_super_admin').default(false).notNull(),
     mfaEnrolled: boolean('mfa_enrolled').default(false).notNull(),
@@ -135,21 +166,26 @@ export const users = coreSchema.table(
     lastActiveAt: timestamp('last_active_at', { withTimezone: true }),
     uiNavPinned: boolean('ui_nav_pinned').default(false).notNull(),
     uiThemeMode: uiThemeModeEnum('ui_theme_mode').default('LIGHT').notNull(),
-    lastWorkspaceTenantId: uuid('last_workspace_tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    lastWorkspaceTenantId: uuid('last_workspace_tenant_id').references(() => tenants.id, {
+      onDelete: 'set null',
+    }),
     ...auditColumns(),
   },
   (t) => [
     uniqueIndex('uq_users_email').on(t.email),
     index('idx_users_primary_tenant_status').on(t.primaryTenantId, t.status),
     check('chk_users_email_lowercase', sql`${t.email} = LOWER(${t.email})`),
-  ]
+    check('chk_users_given_name_non_empty', sql`btrim(${t.givenName}) <> ''`),
+  ],
 );
 
 export const userOidcIdentities = coreSchema.table(
   'user_oidc_identities',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
     providerType: oidcProviderTypeEnum('provider_type').default('MANAGED_OIDC').notNull(),
     issuerUrl: varchar('issuer_url', { length: 500 }).notNull(),
@@ -164,16 +200,20 @@ export const userOidcIdentities = coreSchema.table(
     uniqueIndex('uq_oidc_issuer_subject').on(t.issuerUrl, t.oidcSubject),
     index('idx_oidc_user').on(t.userId),
     index('idx_oidc_tenant_provider').on(t.tenantId, t.providerType),
-  ]
+  ],
 );
 
 export const userInvitations = coreSchema.table(
   'user_invitations',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     email: varchar('email', { length: 255 }).notNull(),
-    invitedByUserId: uuid('invited_by_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    invitedByUserId: uuid('invited_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     tokenHash: varchar('token_hash', { length: 128 }).notNull(),
     targetOrgRoles: jsonb('target_org_roles')
       .$type<Array<{ organizationId: string; roleId: string; accessExpiresOn?: string | null }>>()
@@ -191,14 +231,16 @@ export const userInvitations = coreSchema.table(
     index('idx_invitations_tenant_status').on(t.tenantId, t.status),
     index('idx_invitations_tenant_email').on(t.tenantId, t.email),
     check('chk_invitations_email_lowercase', sql`${t.email} = LOWER(${t.email})`),
-  ]
+  ],
 );
 
 export const userSessions = coreSchema.table(
   'user_sessions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
     oidcSessionId: varchar('oidc_session_id', { length: 255 }).notNull(),
     ipAddress: inet('ip_address'),
@@ -211,8 +253,12 @@ export const userSessions = coreSchema.table(
   (t) => [
     index('idx_sessions_user_active').on(t.userId, t.revokedAt, t.expiresAt),
     index('idx_sessions_tenant').on(t.tenantId),
-  ]
+  ],
 );
+
+// ============================================================================
+// 5. SAAS MODULE REGISTRY, RBAC ROLES, PERMISSIONS & MEMBERSHIPS (Journeys 4 & 5)
+// ============================================================================
 
 export const saasModules = coreSchema.table('saas_modules', {
   code: varchar('code', { length: 64 }).primaryKey(),
@@ -235,7 +281,9 @@ export const roles = coreSchema.table(
     description: text('description'),
     scope: roleScopeEnum('scope').notNull(),
     isSystemDefault: boolean('is_system_default').default(false).notNull(),
-    clonedFromRoleId: uuid('cloned_from_role_id').references((): AnyPgColumn => roles.id, { onDelete: 'set null' }),
+    clonedFromRoleId: uuid('cloned_from_role_id').references((): AnyPgColumn => roles.id, {
+      onDelete: 'set null',
+    }),
     isActive: boolean('is_active').default(true).notNull(),
     ...auditColumns(),
   },
@@ -245,16 +293,18 @@ export const roles = coreSchema.table(
     index('idx_roles_tenant_scope').on(t.tenantId, t.scope),
     check(
       'chk_roles_system_default_scope',
-      sql`(${t.isSystemDefault} = true AND ${t.tenantId} IS NULL) OR (${t.isSystemDefault} = false AND ${t.tenantId} IS NOT NULL)`
+      sql`(${t.isSystemDefault} = true AND ${t.tenantId} IS NULL) OR (${t.isSystemDefault} = false AND ${t.tenantId} IS NOT NULL)`,
     ),
-  ]
+  ],
 );
 
 export const permissions = coreSchema.table(
   'permissions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    moduleCode: varchar('module_code', { length: 64 }).notNull().references(() => saasModules.code, { onDelete: 'restrict' }),
+    moduleCode: varchar('module_code', { length: 64 })
+      .notNull()
+      .references(() => saasModules.code, { onDelete: 'restrict' }),
     resourceKey: varchar('resource_key', { length: 100 }).notNull(),
     resourceLabel: varchar('resource_label', { length: 140 }).notNull(),
     action: permissionActionEnum('action').notNull(),
@@ -267,31 +317,41 @@ export const permissions = coreSchema.table(
     uniqueIndex('uq_permissions_code').on(t.permissionCode),
     uniqueIndex('uq_permissions_module_res_action').on(t.moduleCode, t.resourceKey, t.action),
     index('idx_permissions_module').on(t.moduleCode),
-  ]
+  ],
 );
 
 export const rolePermissions = coreSchema.table(
   'role_permissions',
   {
-    roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
-    permissionId: uuid('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    permissionId: uuid('permission_id')
+      .notNull()
+      .references(() => permissions.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
     ...auditColumns(),
   },
   (t) => [
     primaryKey({ name: 'pk_role_permissions', columns: [t.roleId, t.permissionId] }),
     index('idx_role_permissions_tenant').on(t.tenantId),
-  ]
+  ],
 );
 
 export const organizationMemberships = coreSchema.table(
   'organization_memberships',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     organizationId: uuid('organization_id').notNull(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'restrict' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'restrict' }),
     membershipType: membershipTypeEnum('membership_type').default('INTERNAL_STAFF').notNull(),
     status: membershipStatusEnum('status').default('ACTIVE').notNull(),
     accessStartsOn: date('access_starts_on'),
@@ -310,10 +370,14 @@ export const organizationMemberships = coreSchema.table(
     index('idx_org_membership_org_status').on(t.tenantId, t.organizationId, t.status),
     check(
       'chk_org_membership_date_window',
-      sql`${t.accessStartsOn} IS NULL OR ${t.accessExpiresOn} IS NULL OR ${t.accessExpiresOn} >= ${t.accessStartsOn}`
+      sql`${t.accessStartsOn} IS NULL OR ${t.accessExpiresOn} IS NULL OR ${t.accessExpiresOn} >= ${t.accessStartsOn}`,
     ),
-  ]
+  ],
 );
+
+// ============================================================================
+// 6. SUBSCRIPTIONS, PLANS & MODULE ENTITLEMENTS (Journeys 6 & 7)
+// ============================================================================
 
 export const subscriptionPlans = coreSchema.table(
   'subscription_plans',
@@ -334,15 +398,19 @@ export const subscriptionPlans = coreSchema.table(
     uniqueIndex('uq_subscription_plans_code').on(t.code),
     check('chk_plans_positive_limits', sql`${t.defaultSeatLimit} > 0 AND ${t.defaultOrgLimit} > 0`),
     check('chk_plans_non_negative_price', sql`${t.annualBasePrice} >= 0 AND ${t.monthlyBasePrice} >= 0`),
-  ]
+  ],
 );
 
 export const tenantSubscriptions = coreSchema.table(
   'tenant_subscriptions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-    planId: uuid('plan_id').notNull().references(() => subscriptionPlans.id, { onDelete: 'restrict' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => subscriptionPlans.id, { onDelete: 'restrict' }),
     billingCycle: billingCycleEnum('billing_cycle').default('ANNUAL').notNull(),
     status: subscriptionStatusEnum('status').default('ACTIVE').notNull(),
     contractValue: numeric('contract_value', { precision: 14, scale: 2 }).notNull(),
@@ -359,16 +427,22 @@ export const tenantSubscriptions = coreSchema.table(
     uniqueIndex('uq_tenant_subscriptions_tenant').on(t.tenantId),
     check('chk_sub_positive_caps', sql`${t.seatLimit} > 0 AND ${t.orgLimit} > 0`),
     check('chk_sub_period_order', sql`${t.currentPeriodEndOn} >= ${t.currentPeriodStartOn}`),
-  ]
+  ],
 );
 
 export const tenantModuleSubscriptions = coreSchema.table(
   'tenant_module_subscriptions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-    subscriptionId: uuid('subscription_id').notNull().references(() => tenantSubscriptions.id, { onDelete: 'cascade' }),
-    moduleCode: varchar('module_code', { length: 64 }).notNull().references(() => saasModules.code, { onDelete: 'restrict' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => tenantSubscriptions.id, { onDelete: 'cascade' }),
+    moduleCode: varchar('module_code', { length: 64 })
+      .notNull()
+      .references(() => saasModules.code, { onDelete: 'restrict' }),
     status: moduleSubscriptionStatusEnum('status').default('ACTIVE').notNull(),
     moduleSeatLimit: integer('module_seat_limit'),
     featureFlags: jsonb('feature_flags').$type<Record<string, boolean>>().default({}).notNull(),
@@ -380,16 +454,20 @@ export const tenantModuleSubscriptions = coreSchema.table(
     uniqueIndex('uq_tenant_module_sub').on(t.tenantId, t.moduleCode),
     index('idx_tenant_module_status').on(t.tenantId, t.status),
     check('chk_mod_sub_seat_limit', sql`${t.moduleSeatLimit} IS NULL OR ${t.moduleSeatLimit} > 0`),
-  ]
+  ],
 );
 
 export const organizationModuleEntitlements = coreSchema.table(
   'organization_module_entitlements',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
     organizationId: uuid('organization_id').notNull(),
-    moduleCode: varchar('module_code', { length: 64 }).notNull().references(() => saasModules.code, { onDelete: 'restrict' }),
+    moduleCode: varchar('module_code', { length: 64 })
+      .notNull()
+      .references(() => saasModules.code, { onDelete: 'restrict' }),
     isEnabled: boolean('is_enabled').default(false).notNull(),
     allocatedSeatLimit: integer('allocated_seat_limit'),
     featureOverrides: jsonb('feature_overrides').$type<Record<string, boolean>>().default({}).notNull(),
@@ -404,15 +482,19 @@ export const organizationModuleEntitlements = coreSchema.table(
     uniqueIndex('uq_org_module_entitlement').on(t.tenantId, t.organizationId, t.moduleCode),
     index('idx_org_entitlements_enabled').on(t.tenantId, t.moduleCode, t.isEnabled),
     check('chk_org_ent_seat_limit', sql`${t.allocatedSeatLimit} IS NULL OR ${t.allocatedSeatLimit} > 0`),
-  ]
+  ],
 );
 
 export const subscriptionChangeLogs = coreSchema.table(
   'subscription_change_logs',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-    subscriptionId: uuid('subscription_id').notNull().references(() => tenantSubscriptions.id, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => tenantSubscriptions.id, { onDelete: 'cascade' }),
     changeType: subscriptionChangeTypeEnum('change_type').notNull(),
     effectiveTiming: changeEffectiveTimingEnum('effective_timing').default('IMMEDIATE').notNull(),
     effectiveOn: date('effective_on').notNull(),
@@ -430,13 +512,19 @@ export const subscriptionChangeLogs = coreSchema.table(
       }>()
       .notNull(),
     confirmationTokenTyped: varchar('confirmation_token_typed', { length: 120 }),
-    confirmedByUserId: uuid('confirmed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    confirmedByUserId: uuid('confirmed_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
     status: subscriptionChangeStatusEnum('status').default('PREVIEWED').notNull(),
     ...auditColumns(),
   },
-  (t) => [index('idx_sub_changes_tenant_status').on(t.tenantId, t.status, t.effectiveOn)]
+  (t) => [index('idx_sub_changes_tenant_status').on(t.tenantId, t.status, t.effectiveOn)],
 );
+
+// ============================================================================
+// 7. PLATFORM CONFIGURATION, API KEYS & WEBHOOKS (Journey 8)
+// ============================================================================
 
 export const platformConfigurations = coreSchema.table(
   'platform_configurations',
@@ -456,7 +544,7 @@ export const platformConfigurations = coreSchema.table(
     uniqueIndex('uq_platform_config_tenant_key').on(t.scopeTenantId, t.configKey).where(sql`${t.scopeTenantId} IS NOT NULL`),
     index('idx_platform_config_cat').on(t.scopeTenantId, t.category),
     check('chk_config_positive_version', sql`${t.version} > 0`),
-  ]
+  ],
 );
 
 export const apiKeys = coreSchema.table(
@@ -477,7 +565,7 @@ export const apiKeys = coreSchema.table(
   (t) => [
     uniqueIndex('uq_api_keys_hash').on(t.keyHash),
     index('idx_api_keys_tenant_status').on(t.tenantId, t.status),
-  ]
+  ],
 );
 
 export const webhookEndpoints = coreSchema.table(
@@ -493,8 +581,12 @@ export const webhookEndpoints = coreSchema.table(
     lastDeliveredAt: timestamp('last_delivered_at', { withTimezone: true }),
     ...auditColumns(),
   },
-  (t) => [index('idx_webhooks_tenant_status').on(t.tenantId, t.status)]
+  (t) => [index('idx_webhooks_tenant_status').on(t.tenantId, t.status)],
 );
+
+// ============================================================================
+// 8. CENTRALIZED APPEND-ONLY AUDIT LOGS (Journey 9)
+// ============================================================================
 
 export const auditLogs = coreSchema.table(
   'audit_logs',
@@ -502,12 +594,16 @@ export const auditLogs = coreSchema.table(
     id: uuid('id').defaultRandom().primaryKey(),
     eventCode: varchar('event_code', { length: 32 }).notNull(),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
-    organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+    organizationId: uuid('organization_id').references(() => organizations.id, {
+      onDelete: 'set null',
+    }),
     actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
     actorOidcSub: varchar('actor_oidc_sub', { length: 255 }),
     actorNameSnapshot: varchar('actor_name_snapshot', { length: 160 }).notNull(),
     actorRoleSnapshot: varchar('actor_role_snapshot', { length: 120 }),
-    serviceSource: varchar('service_source', { length: 64 }).notNull().references(() => saasModules.code, { onDelete: 'restrict' }),
+    serviceSource: varchar('service_source', { length: 64 })
+      .notNull()
+      .references(() => saasModules.code, { onDelete: 'restrict' }),
     actionCategory: auditCategoryEnum('action_category').notNull(),
     eventAction: varchar('event_action', { length: 120 }).notNull(),
     targetResourceType: varchar('target_resource_type', { length: 80 }).notNull(),
@@ -529,8 +625,12 @@ export const auditLogs = coreSchema.table(
     index('idx_audit_org_created').on(t.tenantId, t.organizationId, t.createdAt),
     index('idx_audit_service_cat_outcome').on(t.serviceSource, t.actionCategory, t.outcome),
     index('idx_audit_otel_trace').on(t.otelTraceId),
-  ]
+  ],
 );
+
+// ============================================================================
+// 9. SHARED NOTIFICATION ORCHESTRATION & PREFERENCES (Journey 10)
+// ============================================================================
 
 export const notificationChannelConfigs = coreSchema.table(
   'notification_channel_configs',
@@ -546,7 +646,7 @@ export const notificationChannelConfigs = coreSchema.table(
   (t) => [
     uniqueIndex('uq_notif_channel_global').on(t.channel).where(sql`${t.tenantId} IS NULL`),
     uniqueIndex('uq_notif_channel_tenant').on(t.tenantId, t.channel).where(sql`${t.tenantId} IS NOT NULL`),
-  ]
+  ],
 );
 
 export const notificationRoutingRules = coreSchema.table(
@@ -568,14 +668,16 @@ export const notificationRoutingRules = coreSchema.table(
   (t) => [
     uniqueIndex('uq_notif_rule_global_event').on(t.eventKey).where(sql`${t.tenantId} IS NULL`),
     uniqueIndex('uq_notif_rule_tenant_event').on(t.tenantId, t.eventKey).where(sql`${t.tenantId} IS NOT NULL`),
-  ]
+  ],
 );
 
 export const userNotificationPreferences = coreSchema.table(
   'user_notification_preferences',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
     eventCategory: notificationCategoryEnum('event_category').notNull(),
     inAppEnabled: boolean('in_app_enabled').default(true).notNull(),
@@ -591,7 +693,7 @@ export const userNotificationPreferences = coreSchema.table(
   (t) => [
     uniqueIndex('uq_user_notif_pref_global').on(t.userId, t.eventCategory).where(sql`${t.tenantId} IS NULL`),
     uniqueIndex('uq_user_notif_pref_tenant').on(t.userId, t.tenantId, t.eventCategory).where(sql`${t.tenantId} IS NOT NULL`),
-  ]
+  ],
 );
 
 export const notificationDeliveries = coreSchema.table(
@@ -599,7 +701,9 @@ export const notificationDeliveries = coreSchema.table(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
-    recipientUserId: uuid('recipient_user_id').references(() => users.id, { onDelete: 'cascade' }),
+    recipientUserId: uuid('recipient_user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
     eventKey: varchar('event_key', { length: 120 }).notNull(),
     channel: notificationChannelEnum('channel').notNull(),
     subject: varchar('subject', { length: 240 }).notNull(),
@@ -616,5 +720,5 @@ export const notificationDeliveries = coreSchema.table(
   (t) => [
     index('idx_notif_deliv_recipient_unread').on(t.recipientUserId, t.channel, t.isRead),
     index('idx_notif_deliv_tenant_status').on(t.tenantId, t.deliveryStatus, t.createdAt),
-  ]
+  ],
 );

@@ -8,7 +8,8 @@
 -- immediately after drizzle-kit push during npm run db:bootstrap.
 --
 -- Implementation Specs: Idempotent PostgreSQL 16 DDL covering schema core, 30 enum types,
--- 24 tables, all table/view columns, 2 views, 8 functions, 24 triggers, and 25 RLS policies.
+-- 24 tables, all table/view columns (including given_name, family_name & GENERATED STORED full_name),
+-- 2 views, 8 functions, 24 triggers, and 25 RLS policies.
 
 BEGIN;
 
@@ -522,7 +523,9 @@ COMMENT ON TABLE core.users IS 'Application-level user directory linked to deleg
 COMMENT ON COLUMN core.users.id IS 'Primary UUID identifier for the platform user.';
 COMMENT ON COLUMN core.users.primary_tenant_id IS 'Primary home tenant UUID (NULL for global Platform Super Admins).';
 COMMENT ON COLUMN core.users.email IS 'Unique normalized lowercase work email address.';
-COMMENT ON COLUMN core.users.full_name IS 'Full display name shown across directories and audit snapshots.';
+COMMENT ON COLUMN core.users.given_name IS 'Required given/first name (OIDC given_name claim) used to derive full_name.';
+COMMENT ON COLUMN core.users.family_name IS 'Optional family/last name (OIDC family_name claim; NULL allowed for mononyms).';
+COMMENT ON COLUMN core.users.full_name IS 'PostgreSQL GENERATED ALWAYS AS (...) STORED display name derived from given_name and family_name for backward-compatible APIs and UI.';
 COMMENT ON COLUMN core.users.phone IS 'Optional administrative contact phone number.';
 COMMENT ON COLUMN core.users.is_platform_super_admin IS 'True when the user holds global cross-tenant Platform Super Admin privileges.';
 COMMENT ON COLUMN core.users.mfa_enrolled IS 'Indicates IdP-reported MFA enrollment status driving security KPIs.';

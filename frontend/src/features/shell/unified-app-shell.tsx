@@ -1,8 +1,8 @@
-// frontend/src/features/shell/unified-app-shell.tsx
+// metrix-core/frontend/src/features/shell/unified-app-shell.tsx
 /*
 Purpose: Provides the unified 56px Top Bar and collapsible/pinnable 260px Left
-Navigation shell with Pin Down / Pin Up icons, responsive <1024px override,
-Unified Module Switcher, Global Command Search, and Appearance Menu.
+Navigation shell with Pin Down / Pin Up icons, responsive <1024px auto-collapse
+override, Unified Module Switcher, Global Command Search, and Appearance Menu.
 
 Context: Satisfies US-01.3, US-01.4, FR-CORE-004 through FR-CORE-009, BR-017,
 and WCAG 2.1 AA landmarks (<nav>, <aside>, role="dialog") with hydration-safe
@@ -18,6 +18,7 @@ useSyncExternalStore for window.innerWidth.
 import React, {
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -43,7 +44,10 @@ import { useSession } from "@/features/auth/session-context";
 import { AppearanceMenu } from "@/features/shell/appearance-menu";
 import { GlobalCommandSearch } from "@/features/shell/global-command-search";
 import { ModuleSwitcher } from "@/features/shell/module-switcher";
-import { resolveSidebarPresentation } from "@/features/shell/navigation-state";
+import {
+  DESKTOP_PIN_BREAKPOINT,
+  resolveSidebarPresentation,
+} from "@/features/shell/navigation-state";
 import { useTranslations } from "@/i18n/i18n-provider";
 import { coreApi } from "@/lib/api/platform-core-api";
 import { cn } from "@/lib/utils";
@@ -169,6 +173,15 @@ export function UnifiedAppShell({
     getViewportWidthSnapshot,
     () => 1440
   );
+  const isDesktop = viewportWidth >= DESKTOP_PIN_BREAKPOINT;
+  const prevIsDesktopRef = useRef(isDesktop);
+
+  useEffect(() => {
+    if (prevIsDesktopRef.current && !isDesktop) {
+      queueMicrotask(() => setIsOverlayOpen(false));
+    }
+    prevIsDesktopRef.current = isDesktop;
+  }, [isDesktop]);
 
   const manifestQuery = useQuery({
     queryKey: ["me-modules", requestContext.tenantId, activeOrganizationId],
@@ -208,20 +221,25 @@ export function UnifiedAppShell({
   );
 
   const togglePin = useCallback(() => {
+    if (!isDesktop) return;
     const nextPinned = !savedPinned;
     setSavedPinnedOverride(nextPinned);
     setIsOverlayOpen(!nextPinned);
     void coreApi
       .updateUiPreferences({ uiNavPinned: nextPinned }, requestContext)
       .catch(() => undefined);
-  }, [requestContext, savedPinned]);
+  }, [isDesktop, requestContext, savedPinned]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (mod && event.key.toLowerCase() === "b") {
         event.preventDefault();
-        setIsOverlayOpen((prev) => !prev);
+        if (presentation === "pinned") {
+          togglePin();
+        } else {
+          setIsOverlayOpen((prev) => !prev);
+        }
       } else if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
         event.preventDefault();
         togglePin();
@@ -234,7 +252,7 @@ export function UnifiedAppShell({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [togglePin]);
+  }, [presentation, togglePin]);
 
   const sidebarContent = (isPinned: boolean) => (
     <div className="flex h-full w-[260px] flex-col justify-between border-e border-sidebar-border bg-sidebar">
@@ -249,26 +267,28 @@ export function UnifiedAppShell({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label={
-                isPinned ? t("a11y.unpinNavigation") : t("a11y.pinNavigation")
-              }
-              data-pin-state={isPinned ? "pinned" : "unpinned"}
-              onClick={togglePin}
-              className={cn(
-                "inline-flex h-7 w-7 items-center justify-center rounded-md border",
-                isPinned
-                  ? "border-primary bg-sidebar-nav-active text-primary"
-                  : "border-border bg-card text-muted-foreground-1 hover:bg-layer-hover"
-              )}
-            >
-              {isPinned ? (
-                <Pin className="h-3.5 w-3.5" aria-hidden="true" />
-              ) : (
-                <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-            </button>
+            {isDesktop ? (
+              <button
+                type="button"
+                aria-label={
+                  isPinned ? t("a11y.unpinNavigation") : t("a11y.pinNavigation")
+                }
+                data-pin-state={isPinned ? "pinned" : "unpinned"}
+                onClick={togglePin}
+                className={cn(
+                  "inline-flex h-7 w-7 items-center justify-center rounded-md border",
+                  isPinned
+                    ? "border-primary bg-sidebar-nav-active text-primary"
+                    : "border-border bg-card text-muted-foreground-1 hover:bg-layer-hover"
+                )}
+              >
+                {isPinned ? (
+                  <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+            ) : null}
             {!isPinned ? (
               <button
                 type="button"

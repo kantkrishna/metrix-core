@@ -1,4 +1,4 @@
-// frontend/src/app/(shell)/modules/[moduleCode]/page.tsx
+// metrix-core/frontend/src/app/(shell)/modules/[moduleCode]/page.tsx
 /*
 Purpose: Renders the unified downstream module shell boundary or triggers the
 Graceful Organization-Level Module Fallback when a module is not enabled on the
@@ -30,6 +30,13 @@ import { useTranslations } from "@/i18n/i18n-provider";
 import { coreApi } from "@/lib/api/platform-core-api";
 import { useThemePreference } from "@/providers/theme-provider";
 
+const MODULE_DISPLAY_NAMES: Record<string, string> = {
+  platform_core: "Platform Core",
+  tax_financial: "Tax & Financial Intelligence",
+  payroll_hrms: "Payroll & HRMS",
+  ca_practice: "CA Practice & Accounting",
+};
+
 export default function DownstreamModuleBoundaryPage(): React.ReactElement {
   const params = useParams<{ moduleCode: string }>();
   const router = useRouter();
@@ -39,6 +46,7 @@ export default function DownstreamModuleBoundaryPage(): React.ReactElement {
     useSession();
 
   const moduleCode = params.moduleCode;
+  const displayModuleName = MODULE_DISPLAY_NAMES[moduleCode] ?? moduleCode;
 
   const manifestQuery = useQuery({
     queryKey: ["me-modules", requestContext.tenantId, activeOrganizationId],
@@ -62,7 +70,7 @@ export default function DownstreamModuleBoundaryPage(): React.ReactElement {
     enabled: needsFallback,
   });
 
-  if (manifestQuery.isLoading) {
+  if (manifestQuery.isLoading || (needsFallback && orgTreeQuery.isLoading)) {
     return <Skeleton className="h-64 w-full" />;
   }
 
@@ -75,7 +83,7 @@ export default function DownstreamModuleBoundaryPage(): React.ReactElement {
     );
     return (
       <OrganizationModuleFallback
-        moduleName={moduleCode}
+        moduleName={displayModuleName}
         currentOrganizationName={
           manifestQuery.data?.organizationName ?? t("shell.allTenantsContext")
         }
@@ -83,7 +91,6 @@ export default function DownstreamModuleBoundaryPage(): React.ReactElement {
         canManageEntitlements={hasEntitlementAdminAccess(allPerms)}
         onSwitchOrganization={(orgId) => {
           selectOrganization(orgId);
-          void manifestQuery.refetch();
         }}
         onManageEntitlements={() => router.push("/subscriptions")}
       />
@@ -114,7 +121,7 @@ export default function DownstreamModuleBoundaryPage(): React.ReactElement {
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>{activeModule?.name ?? moduleCode}</CardTitle>
+          <CardTitle>{activeModule?.name ?? displayModuleName}</CardTitle>
           <StatusBadge tone="info">
             {t("shell.downstreamBoundaryBadge")}
           </StatusBadge>

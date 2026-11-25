@@ -1,11 +1,11 @@
-// frontend/src/lib/api/http-client.ts
+// metrix-core/frontend/src/lib/api/http-client.ts
 /*
 Purpose: Provides the centralized, tenant-aware HTTP client for communicating
 with the METRix Platform Core REST API.
 
 Context: Enforces OIDC Bearer authentication, PostgreSQL FORCE RLS context
 headers (X-Tenant-Id, X-Organization-Id), BCP-47 Accept-Language propagation,
-and RFC 9457 ProblemDetails error normalization.
+cache: "no-store" anti-bleed protection, and RFC 9457 ProblemDetails errors.
 
 Implementation Specs: Wraps native fetch with Zod v4 response validation and
 pluggable context/token getters so unit tests can run deterministically.

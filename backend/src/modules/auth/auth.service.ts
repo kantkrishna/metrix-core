@@ -5,11 +5,11 @@
 // and logout.
 //
 // Context: Satisfies US-01.1, FR-CORE-001, FR-CORE-002, BR-004, and BR-020
-// with immutable audit logging for successful and denied authentications.
+// with inline suspended tenant/user alerts on /login and immutable audit logs.
 //
 // Implementation Specs: Persists sessions (oidcSessionId) and audit logs via
-// Drizzle ORM under explicit RLS transactions; supports OIDC_DEV_MOCK_ENABLED
-// for local testing.
+// Drizzle ORM under explicit RLS transactions; reads FRONTEND_ORIGIN and
+// OIDC_DEV_MOCK_ENABLED dynamically from process.env / ConfigService.
 
 import crypto from "node:crypto";
 import {
@@ -18,6 +18,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { and, eq, isNull } from "drizzle-orm";
 import { runWithRls, type RlsTx } from "../../common/db-runtime";
 import {
@@ -33,11 +34,30 @@ import {
 
 @Injectable()
 export class AuthService {
-  private readonly defaultIssuer =
-    process.env.OIDC_ISSUER_URL ??
-    "https://id.metrix-erp.cloud/realms/platform-core";
-  private readonly frontendBase =
-    process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
+  public constructor(private readonly config: ConfigService) {}
+
+  private getDefaultIssuer(): string {
+    return (
+      this.config.get<string>("OIDC_ISSUER_URL") ??
+      process.env.OIDC_ISSUER_URL ??
+      "https://id.metrix-erp.cloud/realms/platform-core"
+    );
+  }
+
+  private getFrontendBase(): string {
+    return (
+      this.config.get<string>("FRONTEND_ORIGIN") ??
+      process.env.FRONTEND_ORIGIN ??
+      "http://localhost:3000"
+    );
+  }
+
+  private isDevMockEnabled(): boolean {
+    const val =
+      this.config.get<string>("OIDC_DEV_MOCK_ENABLED") ??
+      process.env.OIDC_DEV_MOCK_ENABLED;
+    return val === "true";
+  }
 
   public async discoverOidc(input: { workspaceSlug?: string; email?: string }) {
     const slug = input.workspaceSlug?.trim().toLowerCase();
@@ -128,25 +148,29 @@ export class AuthService {
           }
         }
 
-        const useDevMock = process.env.OIDC_DEV_MOCK_ENABLED === "true";
+        const issuer = this.getDefaultIssuer();
+        const frontendBase = this.getFrontendBase();
+        const useDevMock = this.isDevMockEnabled();
         const authUrl = useDevMock
-          ? new URL(`${this.frontendBase}/auth/callback`)
-          : new URL(`${this.defaultIssuer.replace(/\/+$/, "")}/authorize`);
+          ? new URL(`${frontendBase}/auth/callback`)
+          : new URL(`${issuer.replace(/\/+$/, "")}/authorize`);
 
         if (useDevMock) {
           authUrl.searchParams.set(
             "code",
-            `dev:${email || "vikram@meridian.in"}`
+            `dev:${email || "vikram.desai@meridian.in"}`
           );
         } else {
           authUrl.searchParams.set("response_type", "code");
           authUrl.searchParams.set(
             "client_id",
-            process.env.OIDC_CLIENT_ID ?? "metrix-platform-core-web"
+            this.config.get<string>("OIDC_CLIENT_ID") ??
+              process.env.OIDC_CLIENT_ID ??
+              "metrix-platform-core-web"
           );
           authUrl.searchParams.set(
             "redirect_uri",
-            `${this.frontendBase}/auth/callback`
+            `${frontendBase}/auth/callback`
           );
           authUrl.searchParams.set("scope", "openid profile email");
           if (email) authUrl.searchParams.set("login_hint", email);
@@ -155,7 +179,7 @@ export class AuthService {
         return {
           providerType,
           authorizationUrl: authUrl.toString(),
-          issuerUrl: this.defaultIssuer,
+          issuerUrl: issuer,
         };
       }
     );

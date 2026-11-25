@@ -1,10 +1,11 @@
-// frontend/src/features/auth/session-context.tsx
+// metrix-core/frontend/src/features/auth/session-context.tsx
 /*
 Purpose: Maintains client-side OIDC session state, active tenant/organization
 RLS context headers, and workspace list across the Platform Core UI.
 
 Context: Supplies RequestContext (Bearer JWT, X-Tenant-Id, X-Organization-Id,
-Accept-Language) while preventing SSR/client hydration mismatches.
+Accept-Language), clears TanStack Query cache on login/logout to prevent
+cross-user bleed, and avoids SSR/client hydration mismatches.
 
 Implementation Specs: Uses referentially stable useSyncExternalStore snapshots
 backed by sessionStorage and exposes isHydrated for route guards.
@@ -19,6 +20,7 @@ import React, {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   OidcCallbackResponse,
   UserUiPreferences,
@@ -27,7 +29,6 @@ import type {
 import { useTranslations } from "@/i18n/i18n-provider";
 import type { RequestContext } from "@/lib/api/http-client";
 import { coreApi } from "@/lib/api/platform-core-api";
-import { useQueryClient } from "@tanstack/react-query";
 import { useThemePreference } from "@/providers/theme-provider";
 
 const SESSION_STORAGE_KEY = "metrix.core.session.v1";
@@ -116,6 +117,7 @@ export function SessionProvider({
 }): React.ReactElement {
   const { locale } = useTranslations();
   const { setPreference } = useThemePreference();
+  const queryClient = useQueryClient();
 
   const isHydrated = useSyncExternalStore(
     emptySubscribe,
@@ -127,8 +129,6 @@ export function SessionProvider({
     getSessionSnapshot,
     () => null
   );
-
-  const queryClient = useQueryClient();
 
   const establishSession = useCallback(
     (payload: OidcCallbackResponse): string | null => {
@@ -152,7 +152,7 @@ export function SessionProvider({
       setPreference(payload.user.uiThemeMode);
       return activeTenantId;
     },
-    [setPreference]
+    [queryClient, setPreference]
   );
 
   const selectTenantWorkspace = useCallback((tenantId: string) => {
@@ -197,7 +197,7 @@ export function SessionProvider({
     writeSession(null);
     queryClient.clear();
     return endUrl;
-  }, [requestContext, session?.accessToken]);
+  }, [queryClient, requestContext, session?.accessToken]);
 
   const value = useMemo<SessionContextValue>(
     () => ({

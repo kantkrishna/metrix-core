@@ -1,14 +1,16 @@
 // backend/src/common/guards/oidc-session.guard.ts
 //
 // Purpose: Validates Bearer access tokens against active core.user_sessions
-// rows and attaches authenticated user and RLS header context to requests.
+// rows and resolves authenticated user, tenant, organization, and Tenant Owner
+// RLS flags for every protected Epic 1 request.
 //
 // Context: Enforces NFR-SEC-01 and NFR-ISO-01 across all protected Epic 1
-// endpoints without storing or checking passwords in Platform Core.
+// endpoints and populates isTenantOwner so PostgreSQL FORCE RLS grants Tenant
+// Admins and CA Partners visibility across their tenant's organizations.
 //
-// Implementation Specs: Reads Authorization Bearer token, verifies active
-// non-revoked session via core.user_sessions.oidcSessionId, and populates
-// req.authUser.
+// Implementation Specs: Verifies core.user_sessions.oidcSessionId and active
+// TENANT_ADMIN membership in core.organization_memberships for the resolved
+// tenantId.
 
 import {
   CanActivate,
@@ -18,7 +20,11 @@ import {
 } from "@nestjs/common";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import type { Request } from "express";
-import { userSessions, users } from "../../db/schema/platform-core";
+import {
+  organizationMemberships,
+  userSessions,
+  users,
+} from "../../db/schema/platform-core";
 import { runWithRls } from "../db-runtime";
 
 export interface AuthenticatedUserContext {
@@ -26,6 +32,7 @@ export interface AuthenticatedUserContext {
   email: string;
   fullName: string;
   isPlatformSuperAdmin: boolean;
+  isTenantOwner: boolean;
   tenantId: string | null;
   organizationId: string | null;
   sessionId: string;
@@ -82,7 +89,35 @@ export class OidcSessionGuard implements CanActivate {
             )
           )
           .limit(1);
-        return rows[0] ?? null;
+
+        const found = rows[0] ?? null;
+        if (!found) return null;
+
+        const resolvedTenantId =
+          tenantHeader ?? found.sessionTenantId ?? found.primaryTenantId;
+
+        let isTenantOwner = found.isPlatformSuperAdmin;
+        if (!isTenantOwner && resolvedTenantId) {
+          const ownerRows = await tx
+            .select({ id: organizationMemberships.id })
+            .from(organizationMemberships)
+            .where(
+              and(
+                eq(organizationMemberships.userId, found.userId),
+                eq(organizationMemberships.tenantId, resolvedTenantId),
+                eq(organizationMemberships.status, "ACTIVE"),
+                eq(organizationMemberships.membershipType, "TENANT_ADMIN")
+              )
+            )
+            .limit(1);
+          isTenantOwner = ownerRows.length > 0;
+        }
+
+        return {
+          ...found,
+          resolvedTenantId,
+          isTenantOwner,
+        };
       }
     );
 
@@ -97,8 +132,8 @@ export class OidcSessionGuard implements CanActivate {
       email: record.email,
       fullName: record.fullName,
       isPlatformSuperAdmin: record.isPlatformSuperAdmin,
-      tenantId:
-        tenantHeader ?? record.sessionTenantId ?? record.primaryTenantId,
+      isTenantOwner: record.isTenantOwner,
+      tenantId: record.resolvedTenantId,
       organizationId: orgHeader,
       sessionId: record.sessionId,
     };

@@ -4,11 +4,11 @@
 // /dashboard/summary, and /organizations/tree for Epic 1 (US-01.2 - US-01.5).
 //
 // Context: Evaluates all queries inside transaction-scoped PostgreSQL FORCE RLS
-// (runWithRls) so cross-tenant and CA multi-client isolation are enforced at
-// the database layer.
+// (runWithRls) with isTenantOwner propagated so Tenant Admins / CA Partners see
+// all their tenant's organizations while scoped staff see only assigned orgs.
 //
 // Implementation Specs: Drizzle ORM queries aligned 1:1 with
-// openapi-platform-core-v1.yaml response schemas.
+// openapi-platform-core-v1.yaml; sets private, no-store + Vary on /me/modules.
 
 import crypto from "node:crypto";
 import {
@@ -124,10 +124,13 @@ export class AppShellController {
   ) {
     const targetOrgId = orgQuery || req.authUser.organizationId;
     const prefs = await this.readUserPreferences(req.authUser.userId);
+    const isAdmin =
+      req.authUser.isPlatformSuperAdmin || req.authUser.isTenantOwner;
 
     const manifest = await runWithRls(
       {
         isSuperAdmin: req.authUser.isPlatformSuperAdmin,
+        isTenantOwner: req.authUser.isTenantOwner,
         userId: req.authUser.userId,
         tenantId: req.authUser.tenantId,
       },
@@ -192,7 +195,7 @@ export class AppShellController {
             permittedRoutes: m.isCoreService
               ? ["dashboard", "tenants", "organizations", "subscriptions"]
               : ["overview"],
-            effectivePermissions: req.authUser.isPlatformSuperAdmin
+            effectivePermissions: isAdmin
               ? ["dashboard:view", "subscriptions:manage", "entitlements:edit"]
               : ["dashboard:view"],
             featureFlags: {},
@@ -200,14 +203,24 @@ export class AppShellController {
 
         const wantLocked = includeLocked === "true";
         const lockedAddOns =
-          wantLocked && req.authUser.isPlatformSuperAdmin
+          wantLocked && isAdmin
             ? allModules
-                .filter((m) => !m.isCoreService && !subMap.has(m.code))
+                .filter((m) => {
+                  if (m.isCoreService) return false;
+                  const sub = subMap.get(m.code);
+                  return (
+                    !sub ||
+                    sub.status === "NOT_SUBSCRIBED" ||
+                    sub.status === "SUSPENDED"
+                  );
+                })
                 .map((m) => ({
                   code: m.code,
                   name: m.displayName,
                   description: m.description,
-                  status: "NOT_SUBSCRIBED" as const,
+                  status: (subMap.get(m.code)?.status === "SUSPENDED"
+                    ? "SUSPENDED"
+                    : "NOT_SUBSCRIBED") as "NOT_SUBSCRIBED" | "SUSPENDED",
                   manageSubscriptionUrl: "/subscriptions",
                   upgradeRequired: true,
                 }))
@@ -229,7 +242,13 @@ export class AppShellController {
 
     const etag = crypto
       .createHash("sha256")
-      .update(JSON.stringify(manifest.modules))
+      .update(
+        JSON.stringify({
+          orgId: manifest.organizationId,
+          modules: manifest.modules,
+          lockedAddOns: manifest.lockedAddOns,
+        })
+      )
       .digest("hex")
       .slice(0, 16);
     res.setHeader("Cache-Control", "private, no-store");
@@ -246,6 +265,7 @@ export class AppShellController {
     return runWithRls(
       {
         isSuperAdmin: req.authUser.isPlatformSuperAdmin,
+        isTenantOwner: req.authUser.isTenantOwner,
         userId: req.authUser.userId,
         tenantId: req.authUser.tenantId,
       },
@@ -328,6 +348,7 @@ export class AppShellController {
     return runWithRls(
       {
         isSuperAdmin: req.authUser.isPlatformSuperAdmin,
+        isTenantOwner: req.authUser.isTenantOwner,
         userId: req.authUser.userId,
         tenantId: req.authUser.tenantId,
       },
@@ -360,6 +381,7 @@ export class AppShellController {
     return runWithRls(
       {
         isSuperAdmin: req.authUser.isPlatformSuperAdmin,
+        isTenantOwner: req.authUser.isTenantOwner,
         userId: req.authUser.userId,
         tenantId,
       },
@@ -371,10 +393,20 @@ export class AppShellController {
               .where(eq(organizations.tenantId, tenantId))
           : await tx.select().from(organizations);
 
-        const ents = await tx
-          .select()
-          .from(organizationModuleEntitlements)
-          .where(eq(organizationModuleEntitlements.isEnabled, true));
+        const ents = tenantId
+          ? await tx
+              .select()
+              .from(organizationModuleEntitlements)
+              .where(
+                and(
+                  eq(organizationModuleEntitlements.tenantId, tenantId),
+                  eq(organizationModuleEntitlements.isEnabled, true)
+                )
+              )
+          : await tx
+              .select()
+              .from(organizationModuleEntitlements)
+              .where(eq(organizationModuleEntitlements.isEnabled, true));
 
         const modsByOrg = new Map<string, string[]>();
         for (const e of ents) {

@@ -1,12 +1,13 @@
 // backend/src/db/seed.ts
 //
 // Purpose: Idempotently seeds Platform Core development data (microservices, plans, permissions,
-// tenants, organizations, users, OIDC links, roles, role permissions, scoped memberships,
-// entitlements, config, audit logs, and notifications) and runs live verification assertions.
+// tenants, organizations, users with given_name/family_name, OIDC links, roles, role permissions,
+// scoped memberships, entitlements, config, audit logs, and notifications) and runs live assertions.
 //
 // Context: Executes as metrix_app (NOSUPERUSER NOBYPASSRLS) during npm run db:bootstrap and
-// Testcontainers integration suites. Ensures Rohan Kulkarni has exactly two active tenants with
-// last_workspace_tenant_id = NULL so login redirects to /workspaces, and verifies 100% DB comments.
+// Testcontainers integration suites. Seeds superAdmin as Krishna Kant (kantkrishna@outlook.com),
+// ensures Rohan Kulkarni has 2 active tenants with last_workspace_tenant_id = NULL, and asserts
+// GENERATED ALWAYS STORED full_name plus 100% PostgreSQL catalog comment coverage.
 //
 // Implementation Specs: Accepts an optional PostgreSQL URL string or PlatformCoreDb instance,
 // uses Drizzle ORM + Decimal.js, enforces transaction-scoped SET LOCAL RLS contexts via
@@ -400,13 +401,15 @@ export async function runSeed(
           .onConflictDoNothing();
 
         // 6. Users & Delegated OIDC Identity Links
+        // Note: full_name is GENERATED ALWAYS AS (...) STORED by PostgreSQL from given_name + family_name.
         await tx
           .insert(s.users)
           .values([
             {
               id: IDS.superAdmin,
-              email: 'rajesh.kapoor@advantax-metrix.io',
-              fullName: 'Rajesh Kapoor',
+              email: 'kantkrishna@outlook.com',
+              givenName: 'Krishna',
+              familyName: 'Kant',
               isPlatformSuperAdmin: true,
               mfaEnrolled: true,
               status: 'ACTIVE',
@@ -420,7 +423,8 @@ export async function runSeed(
               id: IDS.rohanKulkarni,
               primaryTenantId: IDS.tKulkarniCA,
               email: 'rohan.kulkarni@kda-llp.in',
-              fullName: 'Rohan Kulkarni',
+              givenName: 'Rohan',
+              familyName: 'Kulkarni',
               isPlatformSuperAdmin: false,
               mfaEnrolled: true,
               status: 'ACTIVE',
@@ -435,7 +439,8 @@ export async function runSeed(
               id: IDS.ananyaIyer,
               primaryTenantId: IDS.tKulkarniCA,
               email: 'ananya.iyer@kda-llp.in',
-              fullName: 'Ananya Iyer',
+              givenName: 'Ananya',
+              familyName: 'Iyer',
               isPlatformSuperAdmin: false,
               mfaEnrolled: true,
               status: 'ACTIVE',
@@ -450,7 +455,8 @@ export async function runSeed(
               id: IDS.vikramDesai,
               primaryTenantId: IDS.tMeridianEnt,
               email: 'vikram.desai@meridian.in',
-              fullName: 'Vikram Desai',
+              givenName: 'Vikram',
+              familyName: 'Desai',
               isPlatformSuperAdmin: false,
               mfaEnrolled: true,
               status: 'ACTIVE',
@@ -465,7 +471,8 @@ export async function runSeed(
               id: IDS.arjunVerma,
               primaryTenantId: IDS.tVermaSMB,
               email: 'arjun.verma@vermaprecision.in',
-              fullName: 'Arjun Verma',
+              givenName: 'Arjun',
+              familyName: 'Verma',
               isPlatformSuperAdmin: false,
               mfaEnrolled: true,
               status: 'ACTIVE',
@@ -478,6 +485,17 @@ export async function runSeed(
             },
           ])
           .onConflictDoNothing();
+
+        // Keep superAdmin synchronized to Krishna Kant (kantkrishna@outlook.com) even on re-seeded DBs.
+        await tx
+          .update(s.users)
+          .set({
+            email: 'kantkrishna@outlook.com',
+            givenName: 'Krishna',
+            familyName: 'Kant',
+            updatedBy: IDS.superAdmin,
+          })
+          .where(eq(s.users.id, IDS.superAdmin));
 
         // Guarantee Rohan Kulkarni's last_workspace_tenant_id stays NULL on re-seed
         // so post-login routes him to /workspaces instead of auto-selecting a tenant.
@@ -881,7 +899,7 @@ export async function runSeed(
               scopeTenantId: null,
               category: 'GENERAL_LOCALIZATION',
               configKey: 'platform.localization',
-              configValue: { displayName: 'METRix', timezone: 'Asia/Kolkata', currency: 'INR', fyStartMonth: 4 },
+              configValue: { displayName: 'Advantax Tax METRix', timezone: 'Asia/Kolkata', currency: 'INR', fyStartMonth: 4 },
               requiresImpactConfirmation: false,
               createdBy: IDS.superAdmin,
               updatedBy: IDS.superAdmin,
@@ -1137,6 +1155,46 @@ export async function runSeed(
       );
     }
     console.log('✓ Assertion 5 PASSED (DB Catalog Documentation): 100% of core tables, views, and columns carry descriptive PostgreSQL comments.');
+
+    // Assertion 6: GENERATED ALWAYS STORED full_name & SuperAdmin Krishna Kant Verification
+    const superAdminCheck = await withRlsContext(
+      db,
+      { userId: IDS.superAdmin, isPlatformSuperAdmin: true },
+      async (tx) => {
+        const [adminRow] = await tx
+          .select({
+            email: s.users.email,
+            givenName: s.users.givenName,
+            familyName: s.users.familyName,
+            fullName: s.users.fullName,
+          })
+          .from(s.users)
+          .where(eq(s.users.id, IDS.superAdmin));
+        const genMeta = await tx.execute<{ is_generated: string }>(sql`
+          SELECT is_generated
+          FROM information_schema.columns
+          WHERE table_schema = 'core'
+            AND table_name = 'users'
+            AND column_name = 'full_name'
+        `);
+        return {
+          adminRow,
+          isGenerated: genMeta.rows[0]?.is_generated,
+        };
+      },
+    );
+    if (
+      superAdminCheck.isGenerated !== 'ALWAYS' ||
+      superAdminCheck.adminRow?.email !== 'kantkrishna@outlook.com' ||
+      superAdminCheck.adminRow?.givenName !== 'Krishna' ||
+      superAdminCheck.adminRow?.familyName !== 'Kant' ||
+      superAdminCheck.adminRow?.fullName !== 'Krishna Kant'
+    ) {
+      throw new Error(
+        `[FAIL] Generated full_name or superAdmin check failed: ${JSON.stringify(superAdminCheck)}.`,
+      );
+    }
+    console.log('✓ Assertion 6 PASSED (GENERATED STORED full_name & SuperAdmin): kantkrishna@outlook.com -> full_name = "Krishna Kant" (GENERATED ALWAYS STORED).');
   } finally {
     if (created) {
       await created.pool.end();
