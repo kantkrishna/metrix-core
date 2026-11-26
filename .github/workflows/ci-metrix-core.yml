@@ -1,0 +1,264 @@
+# ==============================================================================
+# METRix Core — Unified Root CI Pipeline with Path Filters (Phase 3)
+# Replaces the inert backend/.github/workflows/ci-platform-core.yml with a
+# repository-root workflow that routes PR checks by changed paths while running
+# full verification on pushes to main/develop and manual workflow_dispatch runs.
+# ==============================================================================
+
+name: CI — METRix Core
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      run_all:
+        description: "Run all backend, frontend, and compose verification jobs"
+        type: boolean
+        default: true
+      run_integration:
+        description: "Run PostgreSQL 16 Testcontainers & FORCE RLS integration tests"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # 1. Path Filter Router
+  # ----------------------------------------------------------------------------
+  changes:
+    name: Detect Changed Areas
+    runs-on: ubuntu-latest
+    outputs:
+      root: ${{ steps.filter.outputs.root }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate path filters
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            root:
+              - 'package.json'
+              - 'package-lock.json'
+              - '.nvmrc'
+              - 'docker-compose.yml'
+              - '.github/workflows/ci-metrix-core.yml'
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            docker:
+              - 'docker-compose.yml'
+              - 'backend/Dockerfile'
+              - 'backend/docker-compose.yml'
+              - 'backend/.dockerignore'
+              - 'frontend/Dockerfile'
+              - 'frontend/docker-compose.yml'
+
+  # ----------------------------------------------------------------------------
+  # 2. Backend Security, Static, Contract & Unit Checks (via Root Orchestrator)
+  # ----------------------------------------------------------------------------
+  backend-checks:
+    name: Backend — Audit, OpenAPI, Build & Unit Tests
+    needs: [changes]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_all == true) ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js from .nvmrc
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm run ci:backend
+
+      - name: Security audit (zero vulnerabilities gate)
+        run: npm --prefix backend audit --audit-level=moderate
+
+      - name: TypeScript strict typecheck
+        run: npm run typecheck:backend
+
+      - name: OpenAPI 3.1 & 30-Enum Drizzle parity gate
+        run: npm run openapi:validate
+
+      - name: Build NestJS backend
+        run: npm run build:backend
+
+      - name: Unit & contract test suites
+        run: npm run test:backend
+
+  # ----------------------------------------------------------------------------
+  # 3. Backend PostgreSQL 16 Testcontainers Schema, Seed & FORCE RLS Suite
+  # Uses ubuntu-latest's Docker daemon directly (matching ci-platform-core.yml)
+  # ----------------------------------------------------------------------------
+  backend-integration:
+    name: Backend — PostgreSQL 16 Testcontainers & FORCE RLS Suite
+    needs: [changes, backend-checks]
+    if: >-
+      (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_integration == true) ||
+        needs.changes.outputs.backend == 'true' ||
+        needs.changes.outputs.root == 'true'
+      ) && needs.backend-checks.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js from .nvmrc
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm run ci:backend
+
+      - name: PostgreSQL 16 Testcontainers schema, seed & FORCE RLS isolation suite
+        run: npm run test:backend:integration
+
+  # ----------------------------------------------------------------------------
+  # 4. Frontend Lint, Typecheck, Unit, BDD & Production Build
+  # ----------------------------------------------------------------------------
+  frontend-checks:
+    name: Frontend — Verify, BDD & Next.js Build
+    needs: [changes]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_all == true) ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_APP_NAME: METRix Platform Core
+      NEXT_PUBLIC_PLATFORM_CORE_API_URL: http://localhost:4001/api/v1/core
+      NEXT_PUBLIC_APP_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_DEFAULT_LOCALE: en-IN
+      NEXT_PUBLIC_DEFAULT_TIMEZONE: Asia/Kolkata
+      NEXT_PUBLIC_DEFAULT_CURRENCY: INR
+      NEXT_PUBLIC_ENABLE_MULTI_LANGUAGE: "false"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js from .nvmrc
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm run ci:frontend
+
+      - name: Run frontend verify:all (lint, typecheck & unit tests)
+        run: npm run verify:frontend
+
+      - name: Run Cucumber.js BDD suite
+        run: npm run test:bdd
+
+      - name: Build Next.js production bundle
+        run: npm run build:frontend
+
+  # ----------------------------------------------------------------------------
+  # 5. Unified & Standalone Docker Compose Graph Validation
+  # ----------------------------------------------------------------------------
+  compose-validate:
+    name: Docker — Validate Unified & Standalone Compose Configs
+    needs: [changes]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_all == true) ||
+      needs.changes.outputs.docker == 'true' ||
+      needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate unified root Compose graph (include:)
+        run: |
+          npm run docker:config
+          docker compose --profile bootstrap config --services
+
+      - name: Validate standalone backend & frontend Compose files
+        run: |
+          docker compose -f backend/docker-compose.yml --profile bootstrap config --services
+          docker compose -f frontend/docker-compose.yml config --services
+
+  # ----------------------------------------------------------------------------
+  # 6. Branch-Protection-Safe Aggregator Gate
+  # Always runs so GitHub branch protection can require a single check: "CI Gate"
+  # ----------------------------------------------------------------------------
+  ci-gate:
+    name: CI Gate
+    needs:
+      - changes
+      - backend-checks
+      - backend-integration
+      - frontend-checks
+      - compose-validate
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      RES_CHANGES: ${{ needs.changes.result }}
+      RES_BACKEND: ${{ needs.backend-checks.result }}
+      RES_BACKEND_INT: ${{ needs.backend-integration.result }}
+      RES_FRONTEND: ${{ needs.frontend-checks.result }}
+      RES_COMPOSE: ${{ needs.compose-validate.result }}
+    steps:
+      - name: Evaluate upstream CI results
+        shell: bash
+        run: |
+          {
+            echo "### METRix Core CI Summary"
+            echo ""
+            echo "| Job | Status |"
+            echo "| :--- | :--- |"
+            echo "| Detect Changed Areas | \`$RES_CHANGES\` |"
+            echo "| Backend — Audit, OpenAPI, Build & Unit Tests | \`$RES_BACKEND\` |"
+            echo "| Backend — PostgreSQL 16 Testcontainers & FORCE RLS | \`$RES_BACKEND_INT\` |"
+            echo "| Frontend — Verify, BDD & Next.js Build | \`$RES_FRONTEND\` |"
+            echo "| Docker — Compose Graph Validation | \`$RES_COMPOSE\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for status in "$RES_CHANGES" "$RES_BACKEND" "$RES_BACKEND_INT" "$RES_FRONTEND" "$RES_COMPOSE"; do
+            if [[ "$status" != "success" && "$status" != "skipped" ]]; then
+              echo "::error::One or more CI jobs did not pass (encountered status: $status)."
+              exit 1
+            fi
+          done
+
+          echo "All triggered CI checks passed (untriggered path-filtered jobs cleanly skipped)."
