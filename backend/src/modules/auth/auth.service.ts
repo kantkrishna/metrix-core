@@ -13,6 +13,7 @@
 
 import crypto from "node:crypto";
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -122,7 +123,13 @@ export class AuthService {
             .where(eq(users.email, email))
             .limit(1);
 
-          if (userRow && userRow.status !== "ACTIVE") {
+          if (!userRow) {
+            throw new NotFoundException(
+              `No enterprise account is associated with "${email}". Please verify your work email or contact your administrator for assistance.`
+            );
+          }
+
+          if (userRow.status !== "ACTIVE") {
             await tx.insert(auditLogs).values({
               eventCode: `EVT-${Date.now()}`,
               tenantId: userRow.primaryTenantId,
@@ -143,7 +150,7 @@ export class AuthService {
             );
           }
 
-          if (!slug && userRow?.providerType) {
+          if (!slug && userRow.providerType) {
             providerType = userRow.providerType;
           }
         }
@@ -151,15 +158,19 @@ export class AuthService {
         const issuer = this.getDefaultIssuer();
         const frontendBase = this.getFrontendBase();
         const useDevMock = this.isDevMockEnabled();
+
+        if (useDevMock && !email) {
+          throw new BadRequestException(
+            "Please enter your work email to continue with Enterprise SSO."
+          );
+        }
+
         const authUrl = useDevMock
           ? new URL(`${frontendBase}/auth/callback`)
           : new URL(`${issuer.replace(/\/+$/, "")}/authorize`);
 
         if (useDevMock) {
-          authUrl.searchParams.set(
-            "code",
-            `dev:${email || "vikram.desai@meridian.in"}`
-          );
+          authUrl.searchParams.set("code", `dev:${email}`);
         } else {
           authUrl.searchParams.set("response_type", "code");
           authUrl.searchParams.set(
@@ -175,6 +186,7 @@ export class AuthService {
           authUrl.searchParams.set("scope", "openid profile email");
           if (email) authUrl.searchParams.set("login_hint", email);
         }
+
 
         return {
           providerType,

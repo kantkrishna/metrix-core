@@ -17,12 +17,12 @@ export const ProblemDetailsSchema = z.object({
   title: z.string(),
   status: z.number().int(),
   detail: z.string(),
-  instance: z.string().optional(),
+  instance: z.string().nullable().optional(),
   traceId: z.string().nullable().optional(),
   missingPermission: z.string().nullable().optional(),
   conflictField: z.string().nullable().optional(),
-  hardBlockers: z.array(z.string()).optional(),
-  fieldErrors: z.record(z.string(), z.array(z.string())).optional(),
+  hardBlockers: z.array(z.string()).nullable().optional(),
+  fieldErrors: z.record(z.string(), z.array(z.string())).nullable().optional(),
 });
 
 export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;

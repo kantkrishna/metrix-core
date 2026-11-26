@@ -104,16 +104,30 @@ export class PlatformCoreHttpClient {
     });
 
     if (!response.ok) {
-      const rawError = await response.json().catch(() => null);
+      const rawError = (await response.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
       const parsed = ProblemDetailsSchema.safeParse(rawError);
       if (parsed.success) {
         throw new ApiProblemError(parsed.data);
       }
+
+      const rawMessage = rawError?.detail ?? rawError?.message;
+      const extractedDetail = Array.isArray(rawMessage)
+        ? rawMessage.join(". ")
+        : typeof rawMessage === "string" && rawMessage.trim().length > 0
+          ? rawMessage
+          : `Request failed with HTTP status ${response.status}.`;
+
       throw new ApiProblemError({
         type: "about:blank",
-        title: response.statusText || "Request Failed",
+        title:
+          typeof rawError?.error === "string"
+            ? rawError.error
+            : response.statusText || "Request Failed",
         status: response.status,
-        detail: `Request failed with HTTP status ${response.status}.`,
+        detail: extractedDetail,
       });
     }
 

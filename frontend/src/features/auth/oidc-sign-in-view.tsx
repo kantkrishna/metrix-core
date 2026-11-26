@@ -33,6 +33,7 @@ export function OidcSignInView({
   const { t } = useTranslations();
   const [workspaceSlug, setWorkspaceSlug] = useState("");
   const [email, setEmail] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const discoverMutation = useMutation({
     mutationFn: () =>
@@ -54,15 +55,21 @@ export function OidcSignInView({
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!email.trim()) {
+      setValidationError(t("auth.emailRequired"));
+      return;
+    }
+    setValidationError(null);
     discoverMutation.mutate();
   };
 
   const errorText =
-    discoverMutation.error instanceof ApiProblemError
+    validationError ??
+    (discoverMutation.error instanceof ApiProblemError
       ? discoverMutation.error.message
       : discoverMutation.isError
         ? t("auth.discoverError")
-        : null;
+        : null);
 
   return (
     <main
@@ -127,7 +134,7 @@ export function OidcSignInView({
                   id="work-email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); if (validationError) setValidationError(null); }}
                   placeholder={t("auth.emailPlaceholder")}
                   className="h-9 rounded-md border border-input bg-select px-3 text-sm text-foreground"
                 />
