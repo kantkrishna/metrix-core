@@ -6,19 +6,23 @@
 # Context: Runs the compiled NestJS runtime as a non-root user (node) without shipping devDependencies,
 # test suites, or schema-owner credentials into the final production container image.
 #
-# Implementation Specs: Node 20 Alpine multi-stage build (deps -> dev / builder -> migrator / runner)
+# Implementation Specs: Node 20 Alpine multi-stage build with pnpm 12.14.0 (base -> deps -> dev / builder -> migrator / prod-deps -> runner)
 # preserving local scripts/shims overrides, building via tsconfig.build.json, and healthchecking via Node fetch.
 
 # ----------------------------------------------------------------------------
-# Stage 1: Dependency Installation (includes local npm override shims)
+# Stage 0: Base Runtime with pnpm v12.14.0 (libatomic required by pnpm 12 musl binary)
 # ----------------------------------------------------------------------------
-FROM node:20-alpine AS deps
+FROM node:20-alpine AS base
 WORKDIR /app
+RUN apk add --no-cache libatomic && npm install -g pnpm@12.14.0
 
-COPY package.json package-lock.json* ./
+# ----------------------------------------------------------------------------
+# Stage 1: Dependency Installation (includes pnpm-workspace.yaml & local shims)
+# ----------------------------------------------------------------------------
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY scripts/shims ./scripts/shims
-
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+RUN pnpm install --frozen-lockfile
 
 # ----------------------------------------------------------------------------
 # Stage 2: Development Hot-Reload Target (docker-compose.dev.yml)
@@ -31,7 +35,7 @@ COPY scripts ./scripts
 COPY openapi ./openapi
 COPY src ./src
 EXPOSE 4001
-CMD ["npm", "run", "start:dev"]
+CMD ["pnpm", "run", "start:dev"]
 
 # ----------------------------------------------------------------------------
 # Stage 3: TypeScript / NestJS Production Builder
@@ -42,20 +46,20 @@ COPY drizzle ./drizzle
 COPY scripts ./scripts
 COPY openapi ./openapi
 COPY src ./src
-RUN npm run build
+RUN pnpm run build
 
 # ----------------------------------------------------------------------------
 # Stage 4: One-Shot DB Bootstrap & Migration Runner (db:push + RLS + seed)
 # ----------------------------------------------------------------------------
 FROM builder AS migrator
 ENV NODE_ENV=development
-CMD ["npm", "run", "db:bootstrap"]
+CMD ["pnpm", "run", "db:bootstrap"]
 
 # ----------------------------------------------------------------------------
-# Stage 5: Minimal Production Dependencies Prune
+# Stage 5: Minimal Production Dependencies Install (reuses warm pnpm store)
 # ----------------------------------------------------------------------------
 FROM deps AS prod-deps
-RUN npm prune --omit=dev
+RUN pnpm install --prod --frozen-lockfile
 
 # ----------------------------------------------------------------------------
 # Stage 6: Hardened Non-Root Production Runtime
@@ -69,6 +73,7 @@ ENV API_PREFIX=api/v1/core
 
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./package.json
+COPY --from=builder --chown=node:node /app/scripts/shims ./scripts/shims
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/openapi ./openapi
 

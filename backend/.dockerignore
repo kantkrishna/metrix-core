@@ -6,7 +6,7 @@
 # Context: Prevents Windows/macOS native node_modules binaries (e.g., esbuild) and local .env
 # files from leaking into Linux Alpine container layers.
 #
-# Implementation Specs: Retains scripts/shims/node-abort-controller (required by package.json overrides)
+# Implementation Specs: Retains scripts/shims/node-abort-controller (required by pnpm-workspace.yaml overrides)
 # while ignoring node_modules, dist, coverage, .env, .git, and IDE folders.
 
 node_modules
@@ -22,6 +22,7 @@ coverage
 !.env.example
 *.log
 npm-debug.log*
+pnpm-debug.log*
 *.tsbuildinfo
 *.zip
 test

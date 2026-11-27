@@ -20,4 +20,4 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./openapi:/app/openapi:ro
-    command: ["npm", "run", "start:dev"]
+    command: ["pnpm", "run", "start:dev"]

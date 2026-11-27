@@ -6,20 +6,23 @@
 # Context: Enables independent microservice frontend deployment per
 # METRix-HLD-Concise-20261122.md Section 1 & 2.2.
 #
-# Implementation Specs: Multi-stage Node 24 LTS Alpine build leveraging Next.js
-# standalone server output on port 3000.
+# Implementation Specs: Multi-stage Node 24 LTS Alpine build with pnpm 12.14.0
+# leveraging Next.js standalone server output on port 3000.
 
-FROM node:24-alpine AS deps
+FROM node:24-alpine AS base
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci || npm install
+RUN apk add --no-cache libatomic && npm install -g pnpm@12.14.0
 
-FROM node:24-alpine AS builder
-WORKDIR /app
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN mkdir -p public
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN pnpm run build
 
 FROM node:24-alpine AS runner
 WORKDIR /app
@@ -28,7 +31,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-RUN addgroup --system --gid 1001 nodejs   && adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
