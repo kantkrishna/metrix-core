@@ -1,0 +1,18 @@
+# frontend/pnpm-workspace.yaml
+#
+# Purpose: Configures pnpm v12 dependency overrides and build-script security policies
+# for the standalone METRix Platform Core Next.js frontend package.
+#
+# Context: Preserves lightweight polyrepo isolation (no packages: glob) while migrating
+# npm-only overrides and allowScripts from frontend/package.json to pnpm v12 syntax.
+#
+# Implementation Specs: Pins eslint peer overrides for eslint-plugin-import,
+# eslint-plugin-jsx-a11y, and eslint-plugin-react to $eslint and permits esbuild postinstall.
+
+overrides:
+  eslint-plugin-import>eslint: "$eslint"
+  eslint-plugin-jsx-a11y>eslint: "$eslint"
+  eslint-plugin-react>eslint: "$eslint"
+
+allowBuilds:
+  esbuild: true

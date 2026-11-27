@@ -16,7 +16,7 @@ const drizzleText = readFileSync(resolve('src/db/schema/platform-core.ts'), 'utf
 
 function collectCodeFiles(dir: string, root: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === 'dist' || entry === '.git') continue;
+    if (entry === 'node_modules' || entry === 'dist' || entry === '.git' || entry === 'pnpm-lock.yaml') continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       collectCodeFiles(full, root, acc);

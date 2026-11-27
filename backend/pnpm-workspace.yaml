@@ -1,0 +1,22 @@
+# pnpm-workspace.yaml
+#
+# Purpose: Configures pnpm v12 dependency overrides and build-script approval policies for the METRix Platform Core backend.
+#
+# Context: Preserves standalone polyrepo isolation (no packages: glob) while migrating npm-only overrides and allowScripts from package.json.
+#
+# Implementation Specs: Pins esbuild and glob, aliases deprecated @esbuild-kit/* packages to tsx, routes node-abort-controller to the local shim, and restricts lifecycle scripts strictly to esbuild.
+
+overrides:
+  esbuild: ^0.28.2
+  glob: ^14.0.6
+  '@esbuild-kit/esm-loader': npm:tsx@^4.23.15
+  '@esbuild-kit/core-utils': npm:tsx@^4.23.15
+  node-abort-controller: file:./scripts/shims/node-abort-controller
+
+allowBuilds:
+  esbuild: true
+  '@nestjs/core': false
+  msgpackr-extract: false
+  protobufjs: false
+  ssh2: false
+  cpu-features: false

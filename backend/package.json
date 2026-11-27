@@ -5,7 +5,7 @@
   "private": true,
   "engines": {
     "node": ">=20.11.0",
-    "npm": ">=10.0.0"
+    "pnpm": ">=12.0.0"
   },
   "scripts": {
     "build": "nest build",
@@ -20,11 +20,11 @@
     "db:migrate:rls": "tsx scripts/apply-rls.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "db:bootstrap": "npm run db:push && npm run db:migrate:rls && npm run db:seed",
+    "db:bootstrap": "pnpm run db:push && pnpm run db:migrate:rls && pnpm run db:seed",
     "openapi:validate": "node scripts/validate-openapi.mjs",
     "test:unit": "vitest run test/unit test/contract",
     "test:integration": "vitest run test/integration",
-    "verify:all": "npm run typecheck && npm run openapi:validate && npm run test:unit && npm run test:integration"
+    "verify:all": "pnpm run typecheck && pnpm run openapi:validate && pnpm run test:unit && pnpm run test:integration"
   },
   "dependencies": {
     "@nestjs/common": "^12.6.0",
@@ -55,20 +55,5 @@
     "tsx": "^4.23.15",
     "typescript": "^5.6.3",
     "vitest": "^5.1.1"
-  },
-  "overrides": {
-    "esbuild": "^0.28.2",
-    "glob": "^14.0.6",
-    "@esbuild-kit/esm-loader": "npm:tsx@^4.23.15",
-    "@esbuild-kit/core-utils": "npm:tsx@^4.23.15",
-    "node-abort-controller": "file:./scripts/shims/node-abort-controller"
-  },
-  "allowScripts": {
-    "esbuild": true,
-    "@nestjs/core": false,
-    "msgpackr-extract": false,
-    "protobufjs": false,
-    "ssh2": false,
-    "cpu-features": false
   }
 }

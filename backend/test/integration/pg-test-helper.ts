@@ -47,11 +47,23 @@ export async function startProvisionedPlatformCoreDb(): Promise<ProvisionedTestD
   const ownerUrl = `postgresql://metrix_owner:metrix_owner_dev_pwd@${host}:${port}/${dbName}`;
   const appUrl = `postgresql://metrix_app:metrix_app_dev_pwd@${host}:${port}/${dbName}`;
 
-  execFileSync('npx', ['drizzle-kit', 'push', '--force'], {
+  const drizzlePkgPath = resolve('node_modules/drizzle-kit/package.json');
+  const drizzlePkg = JSON.parse(readFileSync(drizzlePkgPath, 'utf8')) as {
+    bin?: string | Record<string, string>;
+  };
+  const drizzleBinRel =
+    typeof drizzlePkg.bin === 'string'
+      ? drizzlePkg.bin
+      : drizzlePkg.bin?.['drizzle-kit'];
+  if (!drizzleBinRel) {
+    throw new Error('Could not resolve drizzle-kit binary from node_modules/drizzle-kit/package.json');
+  }
+  const drizzleBin = resolve('node_modules/drizzle-kit', drizzleBinRel);
+
+  execFileSync(process.execPath, [drizzleBin, 'push', '--force'], {
     cwd: process.cwd(),
     env: { ...process.env, DATABASE_ADMIN_URL: ownerUrl, DATABASE_URL: appUrl },
     stdio: 'pipe',
-    shell: process.platform === 'win32',
   });
 
   const ownerClient = new Client({ connectionString: ownerUrl });
